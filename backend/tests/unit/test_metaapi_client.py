@@ -1,6 +1,13 @@
 from app.services.trading.metaapi_client import MetaApiClient
 
 
+def test_resolve_trade_symbol_appends_suffix_once() -> None:
+    client = MetaApiClient()
+    client.settings.metaapi_symbol_suffix = '.pro'
+    assert client._resolve_trade_symbol('EURUSD') == 'EURUSD.pro'
+    assert client._resolve_trade_symbol('EURUSD.pro') == 'EURUSD.pro'
+
+
 def test_trade_result_ok_accepts_success_codes() -> None:
     ok, reason = MetaApiClient._trade_result_ok(
         {

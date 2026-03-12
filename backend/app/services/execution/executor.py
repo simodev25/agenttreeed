@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -16,6 +17,13 @@ class ExecutionService:
         self.settings = get_settings()
         self.metaapi = MetaApiClient()
         self.account_selector = MetaApiAccountSelector()
+
+    @staticmethod
+    def _json_safe(payload: Any) -> dict[str, Any]:
+        encoded = jsonable_encoder(payload)
+        if isinstance(encoded, dict):
+            return encoded
+        return {'value': encoded}
 
     async def execute(
         self,
@@ -55,7 +63,7 @@ class ExecutionService:
         db.flush()
 
         if mode == 'simulation':
-            response = {'simulated': True, 'fill_price': None, 'message': 'Simulation order accepted'}
+            response = self._json_safe({'simulated': True, 'fill_price': None, 'message': 'Simulation order accepted'})
             order.status = 'simulated'
             order.response_payload = response
             db.commit()
@@ -84,16 +92,19 @@ class ExecutionService:
                 account_id=selected_account.account_id if selected_account else None,
                 region=selected_account.region if selected_account else None,
             )
+            safe_metaapi_response = self._json_safe(metaapi_response)
             if metaapi_response.get('executed'):
-                metaapi_response['account_label'] = selected_account.label if selected_account else 'default'
+                safe_metaapi_response['account_label'] = selected_account.label if selected_account else 'default'
                 order.status = 'submitted'
-                order.response_payload = metaapi_response
+                order.response_payload = safe_metaapi_response
                 db.commit()
-                return metaapi_response
+                return safe_metaapi_response
 
             # Degraded fallback: emulate paper execution without external broker.
             if mode == 'paper':
-                fallback = {'simulated': True, 'paper_fallback': True, 'reason': metaapi_response.get('reason', 'MetaApi unavailable')}
+                fallback = self._json_safe(
+                    {'simulated': True, 'paper_fallback': True, 'reason': metaapi_response.get('reason', 'MetaApi unavailable')}
+                )
                 order.status = 'paper-simulated'
                 order.response_payload = fallback
                 db.commit()
@@ -101,9 +112,9 @@ class ExecutionService:
 
             order.status = 'failed'
             order.error = metaapi_response.get('reason', 'MetaApi execution failed')
-            order.response_payload = metaapi_response
+            order.response_payload = safe_metaapi_response
             db.commit()
-            return {'executed': False, 'error': order.error, 'details': metaapi_response}
+            return self._json_safe({'executed': False, 'error': order.error, 'details': safe_metaapi_response})
 
         order.status = 'failed'
         order.error = f'Unsupported execution mode: {mode}'

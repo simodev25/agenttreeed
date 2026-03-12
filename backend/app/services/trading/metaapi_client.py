@@ -40,6 +40,15 @@ class MetaApiClient:
     def _resolve_base_url(self) -> str:
         return self.settings.metaapi_base_url.rstrip('/')
 
+    def _resolve_trade_symbol(self, symbol: str) -> str:
+        base_symbol = (symbol or '').strip()
+        suffix = (self.settings.metaapi_symbol_suffix or '').strip()
+        if suffix and not suffix.startswith('.'):
+            suffix = f'.{suffix}'
+        if suffix and not base_symbol.endswith(suffix):
+            return f'{base_symbol}{suffix}'
+        return base_symbol
+
     def _auth_headers(self) -> dict[str, str]:
         return {
             self.settings.metaapi_auth_header: self._resolve_token(),
@@ -247,6 +256,7 @@ class MetaApiClient:
         resolved_account_id = self._resolve_account_id(account_id)
         if not resolved_account_id:
             return {'degraded': True, 'executed': False, 'reason': 'MetaApi account id not configured'}
+        trade_symbol = self._resolve_trade_symbol(symbol)
 
         sdk = self._get_sdk(region)
         if sdk:
@@ -255,21 +265,22 @@ class MetaApiClient:
                 connection = account.get_rpc_connection()
                 await connection.connect()
                 await connection.wait_synchronized()
-                symbol_spec = await connection.get_symbol_specification(symbol)
-                tradable, reason = self._validate_symbol_for_market_order(symbol, symbol_spec)
+                symbol_spec = await connection.get_symbol_specification(trade_symbol)
+                tradable, reason = self._validate_symbol_for_market_order(trade_symbol, symbol_spec)
                 if not tradable:
                     return {
                         'degraded': True,
                         'executed': False,
-                        'reason': reason or f'Symbol {symbol} not tradable',
+                        'reason': reason or f'Symbol {trade_symbol} not tradable',
                         'account_id': resolved_account_id,
                         'provider': 'sdk',
+                        'symbol': trade_symbol,
                         'symbol_spec': symbol_spec,
                     }
                 if side.upper() == 'BUY':
-                    result = await connection.create_market_buy_order(symbol, volume, stop_loss=stop_loss, take_profit=take_profit)
+                    result = await connection.create_market_buy_order(trade_symbol, volume, stop_loss=stop_loss, take_profit=take_profit)
                 else:
-                    result = await connection.create_market_sell_order(symbol, volume, stop_loss=stop_loss, take_profit=take_profit)
+                    result = await connection.create_market_sell_order(trade_symbol, volume, stop_loss=stop_loss, take_profit=take_profit)
                 ok, reason = self._trade_result_ok(result)
                 if not ok:
                     return {
@@ -278,16 +289,24 @@ class MetaApiClient:
                         'reason': reason or 'MetaApi SDK trade rejected',
                         'account_id': resolved_account_id,
                         'provider': 'sdk',
+                        'symbol': trade_symbol,
                         'result': result,
                     }
-                return {'degraded': False, 'executed': True, 'result': result, 'account_id': resolved_account_id, 'provider': 'sdk'}
+                return {
+                    'degraded': False,
+                    'executed': True,
+                    'result': result,
+                    'account_id': resolved_account_id,
+                    'provider': 'sdk',
+                    'symbol': trade_symbol,
+                }
             except Exception as exc:  # pragma: no cover
                 logger.warning('metaapi sdk order failed, trying REST fallback: %s', exc)
 
         action_type = 'ORDER_TYPE_BUY' if side.upper() == 'BUY' else 'ORDER_TYPE_SELL'
         rest_payload = {
             'actionType': action_type,
-            'symbol': symbol,
+            'symbol': trade_symbol,
             'volume': volume,
         }
         if stop_loss is not None:
@@ -303,6 +322,7 @@ class MetaApiClient:
         if result.get('executed'):
             result['account_id'] = resolved_account_id
             result['provider'] = 'rest'
+            result['symbol'] = trade_symbol
             return result
 
         return {
@@ -310,6 +330,7 @@ class MetaApiClient:
             'executed': False,
             'reason': result.get('reason', 'MetaApi execution failed'),
             'account_id': resolved_account_id,
+            'symbol': trade_symbol,
             'endpoint': result.get('endpoint'),
             'raw': result.get('raw'),
         }

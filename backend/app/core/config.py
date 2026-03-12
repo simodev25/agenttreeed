@@ -53,6 +53,7 @@ class Settings(BaseSettings):
         alias='METAAPI_MARKET_BASE_URL',
     )
     metaapi_auth_header: str = Field(default='auth-token', alias='METAAPI_AUTH_HEADER')
+    metaapi_symbol_suffix: str = Field(default='', alias='METAAPI_SYMBOL_SUFFIX')
 
     allow_live_trading: bool = Field(default=False, alias='ALLOW_LIVE_TRADING')
     enable_paper_execution: bool = Field(default=True, alias='ENABLE_PAPER_EXECUTION')
