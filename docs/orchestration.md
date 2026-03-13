@@ -1,57 +1,114 @@
 # Orchestration multi-agent
 
-## Chaîne V1
+## Workflow V1 (ordre exact)
 
-1. Technical analyst
-2. News analyst
-3. Macro analyst
-4. Sentiment analyst
-5. Bullish researcher
-6. Bearish researcher
-7. Trader agent
-8. Risk manager
-9. Execution manager
+1. `technical-analyst`
+2. `news-analyst`
+3. `macro-analyst`
+4. `sentiment-agent`
+5. `bullish-researcher`
+6. `bearish-researcher`
+7. `trader-agent`
+8. `risk-manager`
+9. `execution-manager`
 
-## Niveaux de developpement
+Source de vérité: `backend/app/services/orchestrator/engine.py` (`WORKFLOW_STEPS`).
 
-- `N3 (avance)` : implemente, branche au workflow principal, resilence/fallback presents, trace exploitable.
-- `N2 (intermediaire)` : implemente et stable, logique claire, mais heuristiques encore simples.
-- `N1 (basique)` : MVP fonctionnel, regles minimales, precision a renforcer.
+## Niveaux de maturité
 
-## Roles et niveau par agent
+- `N3 (avancé)`: complet dans le workflow, résilience, tracing exploitable.
+- `N2 (intermédiaire)`: stable et intégré, règles encore simplifiées.
+- `N1 (basique)`: MVP fonctionnel, précision à améliorer.
 
-| Agent | Nom technique | Role dans le workflow | Implementation actuelle | Niveau |
+## Rôles, LLM et niveau
+
+| Agent | Rôle | LLM par défaut | Switch UI | Niveau |
 |---|---|---|---|---|
-| Technical analyst | `technical-analyst` | Calcule un signal technique (trend/RSI/MACD) et un score initial. | Classe dediee (`TechnicalAnalystAgent`) avec logique deterministe. | `N2` |
-| News analyst | `news-analyst` | Analyse les news Yahoo Finance, produit sentiment + resume. | Classe dediee (`NewsAnalystAgent`) avec appel LLM, prompts versionnes en base, mode degrade. | `N3` |
-| Macro analyst | `macro-analyst` | Ajoute un biais macro proxy (volatilite + tendance) pour filtrer le contexte. | Classe dediee (`MacroAnalystAgent`) a heuristiques simples. | `N1` |
-| Sentiment analyst | `sentiment-agent` | Donne un signal momentum court terme depuis variation prix. | Classe dediee (`SentimentAgent`) a heuristiques simples. | `N1` |
-| Bullish researcher | `bullish-researcher` | Construit la these haussiere et les invalidations. | Classe dediee avec agregation des signaux + debat LLM + prompts versionnes + memoire long-terme. | `N3` |
-| Bearish researcher | `bearish-researcher` | Construit la these baissiere et les invalidations. | Classe dediee avec agregation des signaux + debat LLM + prompts versionnes + memoire long-terme. | `N3` |
-| Trader agent | `trader-agent` | Agrege les sorties et decide `BUY/SELL/HOLD` + SL/TP + rationale. | Classe dediee (`TraderAgent`) reglee par net score. | `N2` |
-| Risk manager | `risk-manager` | Valide/refuse l'ordre, controle risque selon mode, propose volume. | Service `RiskEngine` (pas une classe agent nommee) avec regles explicites. | `N2` |
-| Execution manager | `execution-manager` | Execute simulation/paper/live, applique garde-fous et fallback paper. | Service `ExecutionService` + `MetaApiClient` (pas une classe agent nommee). | `N3` |
+| `technical-analyst` | Signal technique initial (trend/RSI/MACD) | Off | Oui | `N2` |
+| `news-analyst` | Analyse news Yahoo + sentiment | On | Oui | `N3` |
+| `macro-analyst` | Biais macro proxy (volatilité/tendance) | Off | Oui | `N1` |
+| `sentiment-agent` | Momentum court terme | Off | Oui | `N1` |
+| `bullish-researcher` | Thèse haussière + invalidations | On | Oui | `N3` |
+| `bearish-researcher` | Thèse baissière + invalidations | On | Oui | `N3` |
+| `trader-agent` | Décision `BUY/SELL/HOLD` + SL/TP | Off | Oui | `N2` |
+| `risk-manager` | Validation/volume selon risque | Off (déterministe) | Non | `N2` |
+| `execution-manager` | Exécution simulation/paper/live | Off (déterministe) | Non | `N3` |
 
-## Differences run vs backtest
+## Pourquoi certains agents sont "réservés"
 
-- Run normal (`/runs`) : workflow complet jusqu'a `execution-manager`.
-- Backtest `agents_v1` : workflow analyse jusqu'a `risk-manager`; execution broker desactivee par design.
+- `risk-manager` et `execution-manager` restent déterministes en V1.
+- Ils manipulent des contrôles critiques (risque/exécution) et ne doivent pas dépendre d'un LLM pour valider/refuser un ordre.
+- Ils sont donc actifs dans le workflow, mais "non switchables LLM" dans la UI.
 
-## Mapping code (source of truth)
+## Comment activer/désactiver LLM par agent
 
-- Orchestrateur et ordre des etapes : `backend/app/services/orchestrator/engine.py`
-- Agents metier : `backend/app/services/orchestrator/agents.py`
-- Gestion du risque : `backend/app/services/risk/rules.py`
-- Execution : `backend/app/services/execution/executor.py`
+Depuis Trading Control Room:
 
-## Enrichissements V1.1
+- écran `Connecteurs` -> section `Modèles LLM par agent`.
+- switch `LLM actif` par agent supporté.
+- modèle dédié par agent (ou héritage du modèle par défaut).
 
-- Les agents `news`, `bullish`, `bearish` utilisent des prompts versionnés en base (`prompt_templates`).
-- Le contexte de débat inclut la mémoire long-terme vectorielle (`memory_entries` + Qdrant).
-- Chaque run enrichit la mémoire avec un résumé décisionnel réutilisable.
+Via API:
+
+`PUT /api/v1/connectors/ollama` avec `settings`:
+
+```json
+{
+  "enabled": true,
+  "settings": {
+    "default_model": "gpt-oss:20b",
+    "agent_models": {
+      "news-analyst": "ministral-3:14b",
+      "bullish-researcher": "gpt-oss:120b"
+    },
+    "agent_llm_enabled": {
+      "technical-analyst": false,
+      "news-analyst": true,
+      "macro-analyst": false,
+      "sentiment-agent": false,
+      "bullish-researcher": true,
+      "bearish-researcher": true,
+      "trader-agent": false
+    }
+  }
+}
+```
+
+## Prompts versionnés
+
+- Tous les agents analytiques de la chaîne V1 ont un prompt versionné.
+- Une nouvelle version peut être créée puis activée sans redéploiement.
+- Endpoints:
+  - `GET /api/v1/prompts`
+  - `POST /api/v1/prompts`
+  - `POST /api/v1/prompts/{id}/activate`
+
+## Run vs backtest
+
+- Run `/runs`: workflow complet jusqu'à `execution-manager`.
+- Backtest `agents_v1`: réutilise `analyze_context` jusqu'à `risk-manager`; execution broker désactivée par design.
+
+## Contrat de sortie (résumé)
+
+```json
+{
+  "decision": "BUY|SELL|HOLD",
+  "confidence": 0.0,
+  "entry": 0.0,
+  "stop_loss": 0.0,
+  "take_profit": 0.0,
+  "risk": {
+    "accepted": true,
+    "reasons": [],
+    "suggested_volume": 0.0
+  },
+  "execution": {}
+}
+```
 
 ## Traçabilité
 
-- Chaque étape est persistée en base (`agent_steps`)
-- Run global dans `analysis_runs`
-- Ordres dans `execution_orders`
+- `analysis_runs`: état global du run.
+- `agent_steps`: input/output de chaque étape.
+- `execution_orders`: ordres et retours broker/simulation.
+- `llm_call_logs`: modèle réellement utilisé, latence, tokens, coût estimé.

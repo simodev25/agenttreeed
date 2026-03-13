@@ -11,6 +11,8 @@ Plateforme IA multi-agent dédiée au Forex avec:
 - Docker Compose local + Helm minimal
 - Mémoire long-terme vectorielle (Qdrant + pgvector fallback)
 - Prompts versionnés en base pour enrichir le débat agents
+- Configuration LLM par agent (switch, modèle effectif, catalogue modèles, prompts modifiables)
+- Trading Control Room: configuration connecteurs, comptes MetaApi, prompts et telemetry LLM
 - Backtesting avancé (Sharpe, Sortino, drawdown, profit factor)
 - Support multi-comptes MetaApi
 - Dashboard Grafana enrichi latence/coûts LLM
@@ -62,11 +64,13 @@ Compte seed local:
 - `GET /api/v1/connectors`
 - `PUT /api/v1/connectors/{name}`
 - `POST /api/v1/connectors/{name}/test`
+- `GET /api/v1/connectors/ollama/models`
 - `GET/POST /api/v1/prompts`
 - `POST /api/v1/prompts/{id}/activate`
 - `POST /api/v1/memory/search`
 - `GET/POST /api/v1/backtests`
 - `GET /api/v1/analytics/llm-summary`
+- `GET /api/v1/analytics/llm-models`
 
 ## Tests
 
@@ -94,3 +98,4 @@ npm run test:e2e
 - [Monitoring](docs/monitoring.md)
 - [Tests](docs/testing.md)
 - [Limites](docs/limits.md)
+- [Troubleshooting](docs/troubleshooting.md)

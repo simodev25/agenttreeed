@@ -1,40 +1,105 @@
-# Architecture technique
+# Architecture technique V1
 
-## Découpage
+## Périmètre
 
-- Backend FastAPI: API REST, auth, RBAC, runs, orchestration, exécution, audit
-- Worker Celery: analyses longues non bloquantes
-- PostgreSQL: persistance principale (runs, étapes, ordres, connecteurs, audit)
-- Redis + RabbitMQ: backend asynchrone
-- Qdrant + pgvector: mémoire vectorielle long-terme
-- Frontend React: dashboard trading + admin
-- Observabilité: métriques Prometheus + dashboard Grafana
+- Classe d'actifs: Forex uniquement (V1).
+- Paires supportées: `EURUSD`, `GBPUSD`, `USDJPY`, `USDCHF`, `AUDUSD`, `USDCAD`, `NZDUSD`, `EURJPY`, `GBPJPY`, `EURGBP`.
+- Timeframes supportés: `M5`, `M15`, `H1`, `H4`, `D1`.
+- Décisions: `BUY`, `SELL`, `HOLD`.
 
-## Modules backend
+## Vue composants
 
-- `app/services/orchestrator`: moteur central + handoffs agents
-- `app/services/llm`: client Ollama Cloud avec retry + fallback
-- `app/services/market`: provider yfinance (indicateurs + news)
-- `app/services/trading`: client MetaApi Cloud SDK
-- `app/services/backtest`: moteur de backtesting et analytics
-- `app/services/risk`: règles de risque, sizing, blocages
-- `app/services/execution`: simulation/paper/live avec garde-fous
-- `app/services/prompts`: templates versionnés en base
-- `app/services/memory`: mémoire vectorielle et récupération contexte
+```mermaid
+flowchart LR
+  UI[Frontend React/Vite] --> API[FastAPI]
+  API --> PG[(PostgreSQL)]
+  API --> MQ[(RabbitMQ)]
+  API --> REDIS[(Redis)]
+  API --> QDRANT[(Qdrant)]
+  API --> OLLAMA[Ollama Cloud]
+  API --> METAAPI[MetaApi]
+  API --> YF[yfinance]
+  WORKER[Celery Worker] --> MQ
+  WORKER --> REDIS
+  WORKER --> API
+  WORKER --> PG
+  WORKER --> OLLAMA
+  WORKER --> METAAPI
+  WORKER --> YF
+  WORKER --> QDRANT
+  API --> PROM[Prometheus /metrics]
+  PROM --> GRAF[Grafana]
+```
 
-## Flux principaux
+## Services principaux
 
-1. L'utilisateur lance un run (`/runs`)
-2. Run stocké `pending` puis `queued/running`
-3. Orchestrateur récupère marché (yfinance) + news
-4. Agents analysent et débattent
-5. Trader propose BUY/SELL/HOLD
-6. Risk manager valide/refuse
-7. Execution manager simule ou envoie (paper/live)
-8. Trace complète persistée (`analysis_runs`, `agent_steps`, `execution_orders`)
+- `backend/app/api`: routes REST (`/runs`, `/backtests`, `/connectors`, `/prompts`, `/analytics`, `/trading`).
+- `backend/app/services/orchestrator`: orchestration multi-agent et persistence `agent_steps`.
+- `backend/app/services/llm`: client Ollama avec retries + logs coût/latence + fallback.
+- `backend/app/services/market`: provider yfinance (snapshot, historique, news).
+- `backend/app/services/trading`: MetaApi SDK puis fallback REST.
+- `backend/app/services/execution`: séparation `simulation`, `paper`, `live`.
+- `backend/app/services/risk`: règles de taille/risque et blocages.
+- `backend/app/services/prompts`: prompts versionnés/activables en base.
+- `backend/app/services/memory`: mémoire vectorielle (Qdrant + fallback SQL cosine).
+- `backend/app/services/backtest`: stratégies `agents_v1` et `ema_rsi`.
+
+## Flux run (temps réel)
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant F as Frontend
+  participant A as FastAPI
+  participant W as Celery Worker
+  participant P as PostgreSQL
+  participant O as Ollama
+  participant M as MetaApi
+  participant Y as yfinance
+  participant Q as Qdrant
+
+  U->>F: Lancer run
+  F->>A: POST /api/v1/runs?async_execution=true
+  A->>P: analysis_runs=pending/queued
+  A->>W: task execute(run_id)
+  W->>Y: snapshot + news
+  W->>Q: memory search
+  W->>O: appels LLM selon agent/config
+  W->>P: agent_steps + decision + trace
+  W->>M: paper/live order (si BUY/SELL + risk ok)
+  W->>P: execution_orders + status final
+  F->>A: GET /api/v1/runs
+  A->>F: status + décision + runtime
+```
+
+## Flux backtest
+
+- Endpoint: `POST /api/v1/backtests`.
+- Stratégies:
+  - `agents_v1`: passe par `ForexOrchestrator.analyze_context` (sans execution broker).
+  - `ema_rsi`: stratégie technique déterministe.
+- Sorties: métriques (Sharpe, Sortino, drawdown, profit factor), equity curve, trades.
+
+## Schéma logique de données
+
+Tables cœur de plateforme:
+
+- `users`: authentification locale + rôles (`super-admin`, `admin`, `trader-operator`, `analyst`, `viewer`).
+- `analysis_runs`: run principal (pair, timeframe, mode, status, decision, trace, error).
+- `agent_steps`: traçabilité détaillée par agent (input/output/status).
+- `execution_orders`: ordres simulation/paper/live et payload de réponse.
+- `connector_configs`: état connecteurs et settings (`default_model`, `agent_models`, `agent_llm_enabled`, etc.).
+- `prompt_templates`: prompts versionnés par agent, activation explicite.
+- `llm_call_logs`: modèle réellement utilisé, tokens, coût estimé, latence, status.
+- `memory_entries`: mémoire long-terme (résumé + embedding + payload).
+- `metaapi_accounts`: multi-comptes MetaApi (label, account_id, region, default).
+- `backtest_runs` / `backtest_trades`: historique et résultats backtesting.
 
 ## Modes dégradés
 
-- Ollama indisponible: fallback déterministe
-- MetaApi indisponible: fallback paper simulé, live refusé
-- yfinance indisponible: run possible avec signaux partiels
+- Ollama indisponible/401: réponse `degraded=true`, fallback déterministe, run continue.
+- MetaApi indisponible/rejet trade:
+  - mode `paper`: fallback simulation (`paper_fallback=true`);
+  - mode `live`: ordre refusé, jamais simulé silencieusement.
+- yfinance indisponible: snapshot/news dégradés, orchestration continue.
+- Qdrant indisponible: recherche mémoire fallback SQL (cosine locale).

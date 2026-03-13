@@ -3,20 +3,72 @@
 ## Parcours clés
 
 1. Login
-2. Dashboard trading: sélection pair/timeframe/mode + lancement run
-3. Détail run: arguments agents, décision, trace
-4. Positions/ordres
-5. Administration connecteurs + test santé
+2. Dashboard trading
+  - sélection `pair`, `timeframe`, `mode`, `risk`, `compte MetaApi`
+  - lancement run async
+  - historique récent avec colonne `Temps running` en temps réel
+3. Détail run
+  - étapes agents
+  - décision finale
+  - justification + risque + exécution
+4. Trading
+  - positions
+  - ordres
+  - comptes MetaApi
+5. Trading Control Room (Connecteurs)
+  - état/test connecteurs
+  - configuration LLM par agent
+  - édition prompts versionnés par agent
+  - analytics LLM + mémoire long-terme
 
 ## Navigation
 
-- Sidebar: Dashboard, Ordres, Connecteurs
-- Header: contexte utilisateur/role
+- Sidebar: Dashboard, Runs, Backtests, Trading, Connecteurs.
+- Header: session utilisateur/rôle.
+- Navigation orientée "opérations d'abord": lancer, suivre, auditer.
+
+## Écrans critiques
+
+### Dashboard
+
+- Carte de lancement run.
+- KPIs de statut (`total`, `actifs`, `complétés`, `échecs`).
+- Tableau d'historique avec:
+  - `ID`, `Pair`, `TF`, `Mode`, `Status`, `Temps running`, `Decision`, `Action`.
+
+### Connecteurs / Trading Control Room
+
+- Tableau connecteurs (`ollama`, `metaapi`, `yfinance`, `qdrant`) avec `Enable/Disable` + `Test`.
+- Bloc `Modèles LLM par agent`:
+  - modèle fallback global,
+  - switch LLM par agent,
+  - modèle spécifique par agent,
+  - "LLM effectif",
+  - bouton `Éditer prompt`.
+- Bloc `Prompts versionnés (par agent)`:
+  - sélection agent,
+  - édition system/user template,
+  - création + activation de version.
+- Bloc `LLM réellement utilisé` (analytics).
+- Bloc `Mémoire long-terme` (search).
 
 ## Design system
 
-- Theme dark premium
-- Typographies: Space Grotesk + IBM Plex Sans
-- Couleurs: fond sombre, accents bleu/vert/rouge
-- Composants: cards, badges d'état, tableaux, formulaires
-- Responsive desktop-first avec adaptation tablette/mobile
+- Thème dark premium orienté trading.
+- Contraste élevé pour données critiques (tableaux, badges, erreurs).
+- Typographies: `Space Grotesk` + `IBM Plex Sans`.
+- Accents:
+  - bleu: navigation/état actif
+  - vert: succès/completed
+  - rouge: blocage/erreur
+- Composants réutilisables:
+  - cards
+  - badges d'état
+  - tableaux de supervision
+  - formulaires administrables.
+
+## Accessibilité minimale
+
+- Contraste texte/fond renforcé sur les sections denses.
+- États visuels explicites (`running`, `completed`, `failed`, `blocked`).
+- Contrôles de formulaire consistants desktop/tablette.

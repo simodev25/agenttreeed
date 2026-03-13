@@ -1,23 +1,61 @@
 # Monitoring
 
-## Logs
+## Logs applicatifs
 
-- Journalisation standard Python côté backend
+Sources:
+
+- `backend` (FastAPI)
+- `worker` (Celery)
+- `qdrant`, `rabbitmq`, `redis`, `postgres`
+
+Logs utiles en debug run:
+
+```bash
+docker compose logs -f worker | rg "agent_step|ollama_chat_call|orchestration failed|backtest_agent_cycle"
+```
 
 ## Metrics Prometheus
 
-- `/metrics` exposé par FastAPI
-- Exemples:
-  - `analysis_runs_total`
-  - `orchestrator_step_duration_seconds`
-  - `llm_calls_total`
-  - `llm_latency_seconds`
-  - `llm_cost_usd_total`
-  - `llm_prompt_tokens_total`
-  - `llm_completion_tokens_total`
+Endpoint:
 
-## Dashboards
+- `GET /metrics` (service backend)
 
-- Prometheus: `http://localhost:9090`
-- Grafana: `http://localhost:3000`
-- Dashboard provisionné: `Forex Platform - LLM & Orchestrator`
+Métriques clés:
+
+- `analysis_runs_total{status=...}`
+- `orchestrator_step_duration_seconds_*`
+- `llm_calls_total{provider,status}`
+- `llm_latency_seconds_*`
+- `llm_cost_usd_total{model}`
+- `llm_prompt_tokens_total{model}`
+- `llm_completion_tokens_total{model}`
+- `external_provider_failures_total{provider}`
+
+## Grafana
+
+- URL: `http://localhost:3000`
+- Credentials local: `admin/admin`
+- Dashboard provisionné:
+  - `Forex Platform - LLM & Orchestrator`
+  - fichier: `infra/docker/grafana/dashboards/llm-observability.json`
+
+Panels disponibles:
+
+- LLM Calls/min par status
+- LLM Latency p95
+- LLM Estimated Cost USD/min par modèle
+- Orchestrator Step Latency p95 par agent
+
+## Analytics API (complément Grafana)
+
+- `GET /api/v1/analytics/llm-summary`
+  - total calls, success/fail, latence moyenne, coût, tokens.
+- `GET /api/v1/analytics/llm-models`
+  - modèles réellement utilisés, volume, taux succès, last seen.
+
+## Alertes recommandées (V1)
+
+- hausse `external_provider_failures_total{provider="ollama"}`.
+- `llm_calls_total{status="error"}` > seuil.
+- p95 `orchestrator_step_duration_seconds` anormalement haute.
+- run `failed` en hausse continue.
