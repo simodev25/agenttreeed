@@ -6,6 +6,26 @@ import type { ExecutionMode, MetaApiAccount, Run } from '../types';
 
 const PAIRS = ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDUSD', 'EURJPY', 'GBPJPY', 'EURGBP'];
 const TIMEFRAMES = ['M5', 'M15', 'H1', 'H4', 'D1'];
+const ACTIVE_STATUSES = new Set(['queued', 'running', 'pending']);
+
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+  }
+  return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+}
+
+function runElapsed(run: Run, nowMs: number): string {
+  const started = new Date(run.created_at).getTime();
+  const finished = new Date(run.updated_at).getTime();
+  const end = ACTIVE_STATUSES.has(run.status) ? nowMs : finished;
+  if (!Number.isFinite(started) || !Number.isFinite(end) || end < started) return '-';
+  return formatDuration(end - started);
+}
 
 export function DashboardPage() {
   const { token } = useAuth();
@@ -18,6 +38,7 @@ export function DashboardPage() {
   const [metaapiAccountRef, setMetaapiAccountRef] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(Date.now());
 
   const loadRuns = async () => {
     if (!token) return;
@@ -50,6 +71,11 @@ export function DashboardPage() {
     }, 5000);
     return () => clearInterval(interval);
   }, [token]);
+
+  useEffect(() => {
+    const ticker = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(ticker);
+  }, []);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -160,6 +186,7 @@ export function DashboardPage() {
               <th>TF</th>
               <th>Mode</th>
               <th>Status</th>
+              <th>Temps running</th>
               <th>Decision</th>
               <th>Action</th>
             </tr>
@@ -174,6 +201,7 @@ export function DashboardPage() {
                 <td>
                   <span className={`badge ${run.status}`}>{run.status}</span>
                 </td>
+                <td>{runElapsed(run, nowMs)}</td>
                 <td>{(run.decision?.decision as string) ?? '-'}</td>
                 <td>
                   <Link to={`/runs/${run.id}`}>Détail</Link>
