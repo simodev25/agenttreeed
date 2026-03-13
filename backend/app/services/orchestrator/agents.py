@@ -35,6 +35,7 @@ class TechnicalAnalystAgent:
     def __init__(self) -> None:
         self.llm = OllamaCloudClient()
         self.model_selector = AgentModelSelector()
+        self.prompt_service = PromptTemplateService()
 
     def run(self, ctx: AgentContext, db: Session | None = None) -> dict[str, Any]:
         m = ctx.market_snapshot
@@ -65,19 +66,52 @@ class TechnicalAnalystAgent:
             'llm_enabled': self.model_selector.is_enabled(db, self.name),
         }
         llm_model = self.model_selector.resolve(db, self.name)
-        output['prompt_meta'] = {'llm_model': llm_model, 'llm_enabled': bool(output['llm_enabled'])}
+        output['prompt_meta'] = {
+            'prompt_id': None,
+            'prompt_version': 0,
+            'llm_model': llm_model,
+            'llm_enabled': bool(output['llm_enabled']),
+        }
 
         if not output['llm_enabled']:
             return output
 
-        prompt = (
-            f'Pair: {ctx.pair}\nTimeframe: {ctx.timeframe}\nTrend: {m.get("trend")}\n'
-            f'RSI: {m.get("rsi")}\nMACD diff: {m.get("macd_diff")}\n'
-            'Donne uniquement: bullish, bearish ou neutral puis une courte justification en français.'
+        fallback_system = 'Tu es un analyste technique Forex. Réponds en français.'
+        fallback_user = (
+            'Pair: {pair}\nTimeframe: {timeframe}\nTrend: {trend}\nRSI: {rsi}\nMACD diff: {macd_diff}\n'
+            'Prix: {last_price}\nDonne uniquement: bullish, bearish ou neutral puis une courte justification.'
         )
+        prompt_info: dict[str, Any] = {'prompt_id': None, 'version': 0}
+        if db is not None:
+            prompt_info = self.prompt_service.render(
+                db=db,
+                agent_name=self.name,
+                fallback_system=fallback_system,
+                fallback_user=fallback_user,
+                variables={
+                    'pair': ctx.pair,
+                    'timeframe': ctx.timeframe,
+                    'trend': m.get('trend'),
+                    'rsi': m.get('rsi'),
+                    'macd_diff': m.get('macd_diff'),
+                    'last_price': m.get('last_price'),
+                },
+            )
+            system_prompt = prompt_info['system_prompt']
+            user_prompt = prompt_info['user_prompt']
+        else:
+            system_prompt = fallback_system
+            user_prompt = fallback_user.format(
+                pair=ctx.pair,
+                timeframe=ctx.timeframe,
+                trend=m.get('trend'),
+                rsi=m.get('rsi'),
+                macd_diff=m.get('macd_diff'),
+                last_price=m.get('last_price'),
+            )
         llm_res = self.llm.chat(
-            'Tu es un analyste technique Forex. Réponds en français.',
-            prompt,
+            system_prompt,
+            user_prompt,
             model=llm_model,
         )
         llm_signal = _parse_signal_from_text(llm_res.get('text', ''))
@@ -91,7 +125,12 @@ class TechnicalAnalystAgent:
                 'score': merged_score,
                 'llm_summary': llm_res.get('text', ''),
                 'degraded': llm_res.get('degraded', False),
-                'prompt_meta': {'llm_model': llm_model},
+                'prompt_meta': {
+                    'prompt_id': prompt_info.get('prompt_id'),
+                    'prompt_version': prompt_info.get('version', 0),
+                    'llm_model': llm_model,
+                    'llm_enabled': True,
+                },
             }
         )
         return output
@@ -120,9 +159,9 @@ class NewsAnalystAgent:
             'Titres:\n{headlines}\nDonne un sentiment concis et les facteurs de risque.'
         )
 
-        prompt_info: dict[str, Any] = {'prompt_id': None, 'version': 0}
         llm_enabled = self.model_selector.is_enabled(db, self.name)
         llm_model = self.model_selector.resolve(db, self.name)
+        prompt_info: dict[str, Any] = {'prompt_id': None, 'version': 0}
         if db is not None and llm_enabled:
             prompt_info = self.prompt_service.render(
                 db=db,
@@ -147,8 +186,6 @@ class NewsAnalystAgent:
                 memory_context='\n'.join(f"- {m.get('summary', '')}" for m in ctx.memory_context) or '- none',
             )
 
-        llm_enabled = self.model_selector.is_enabled(db, self.name)
-        llm_model = self.model_selector.resolve(db, self.name)
         if llm_enabled:
             llm_res = self.llm.chat(system, user, model=llm_model)
             signal = _parse_signal_from_text(llm_res.get('text', ''))
@@ -182,6 +219,7 @@ class MacroAnalystAgent:
     def __init__(self) -> None:
         self.llm = OllamaCloudClient()
         self.model_selector = AgentModelSelector()
+        self.prompt_service = PromptTemplateService()
 
     def run(self, ctx: AgentContext, db: Session | None = None) -> dict[str, Any]:
         market = ctx.market_snapshot
@@ -201,18 +239,49 @@ class MacroAnalystAgent:
         llm_enabled = self.model_selector.is_enabled(db, self.name)
         output['llm_enabled'] = llm_enabled
         llm_model = self.model_selector.resolve(db, self.name)
-        output['prompt_meta'] = {'llm_model': llm_model, 'llm_enabled': llm_enabled}
+        output['prompt_meta'] = {
+            'prompt_id': None,
+            'prompt_version': 0,
+            'llm_model': llm_model,
+            'llm_enabled': llm_enabled,
+        }
         if not llm_enabled:
             return output
 
-        prompt = (
-            f'Pair: {ctx.pair}\nTimeframe: {ctx.timeframe}\nTrend: {market.get("trend")}\n'
-            f'ATR ratio: {round(volatility, 6)}\n'
-            'Donne un biais macro: bullish, bearish ou neutral puis une phrase en français.'
+        fallback_system = 'Tu es un analyste macro Forex. Réponds en français.'
+        fallback_user = (
+            'Pair: {pair}\nTimeframe: {timeframe}\nTrend: {trend}\nATR ratio: {atr_ratio}\n'
+            'Volatilité: {volatility}\nDonne un biais macro: bullish, bearish ou neutral puis une phrase concise.'
         )
+        prompt_info: dict[str, Any] = {'prompt_id': None, 'version': 0}
+        if db is not None:
+            prompt_info = self.prompt_service.render(
+                db=db,
+                agent_name=self.name,
+                fallback_system=fallback_system,
+                fallback_user=fallback_user,
+                variables={
+                    'pair': ctx.pair,
+                    'timeframe': ctx.timeframe,
+                    'trend': market.get('trend'),
+                    'atr_ratio': round(volatility, 6),
+                    'volatility': market.get('atr'),
+                },
+            )
+            system_prompt = prompt_info['system_prompt']
+            user_prompt = prompt_info['user_prompt']
+        else:
+            system_prompt = fallback_system
+            user_prompt = fallback_user.format(
+                pair=ctx.pair,
+                timeframe=ctx.timeframe,
+                trend=market.get('trend'),
+                atr_ratio=round(volatility, 6),
+                volatility=market.get('atr'),
+            )
         llm_res = self.llm.chat(
-            'Tu es un analyste macro Forex. Réponds en français.',
-            prompt,
+            system_prompt,
+            user_prompt,
             model=llm_model,
         )
         llm_signal = _parse_signal_from_text(llm_res.get('text', ''))
@@ -221,7 +290,12 @@ class MacroAnalystAgent:
         output['signal'] = 'bullish' if output['score'] > 0.05 else 'bearish' if output['score'] < -0.05 else 'neutral'
         output['llm_summary'] = llm_res.get('text', '')
         output['degraded'] = llm_res.get('degraded', False)
-        output['prompt_meta'] = {'llm_model': llm_model, 'llm_enabled': llm_enabled}
+        output['prompt_meta'] = {
+            'prompt_id': prompt_info.get('prompt_id'),
+            'prompt_version': prompt_info.get('version', 0),
+            'llm_model': llm_model,
+            'llm_enabled': llm_enabled,
+        }
         return output
 
 
@@ -231,6 +305,7 @@ class SentimentAgent:
     def __init__(self) -> None:
         self.llm = OllamaCloudClient()
         self.model_selector = AgentModelSelector()
+        self.prompt_service = PromptTemplateService()
 
     def run(self, ctx: AgentContext, db: Session | None = None) -> dict[str, Any]:
         market = ctx.market_snapshot
@@ -248,17 +323,47 @@ class SentimentAgent:
         llm_enabled = self.model_selector.is_enabled(db, self.name)
         output['llm_enabled'] = llm_enabled
         llm_model = self.model_selector.resolve(db, self.name)
-        output['prompt_meta'] = {'llm_model': llm_model, 'llm_enabled': llm_enabled}
+        output['prompt_meta'] = {
+            'prompt_id': None,
+            'prompt_version': 0,
+            'llm_model': llm_model,
+            'llm_enabled': llm_enabled,
+        }
         if not llm_enabled:
             return output
 
-        prompt = (
-            f'Pair: {ctx.pair}\nTimeframe: {ctx.timeframe}\nChange pct: {change_pct}\n'
-            'Classe le sentiment: bullish, bearish ou neutral puis une justification française concise.'
+        fallback_system = 'Tu es un analyste sentiment Forex. Réponds en français.'
+        fallback_user = (
+            'Pair: {pair}\nTimeframe: {timeframe}\nChange pct: {change_pct}\nTrend: {trend}\n'
+            'Classe le sentiment: bullish, bearish ou neutral puis une justification concise.'
         )
+        prompt_info: dict[str, Any] = {'prompt_id': None, 'version': 0}
+        if db is not None:
+            prompt_info = self.prompt_service.render(
+                db=db,
+                agent_name=self.name,
+                fallback_system=fallback_system,
+                fallback_user=fallback_user,
+                variables={
+                    'pair': ctx.pair,
+                    'timeframe': ctx.timeframe,
+                    'change_pct': change_pct,
+                    'trend': market.get('trend'),
+                },
+            )
+            system_prompt = prompt_info['system_prompt']
+            user_prompt = prompt_info['user_prompt']
+        else:
+            system_prompt = fallback_system
+            user_prompt = fallback_user.format(
+                pair=ctx.pair,
+                timeframe=ctx.timeframe,
+                change_pct=change_pct,
+                trend=market.get('trend'),
+            )
         llm_res = self.llm.chat(
-            'Tu es un analyste sentiment Forex. Réponds en français.',
-            prompt,
+            system_prompt,
+            user_prompt,
             model=llm_model,
         )
         llm_signal = _parse_signal_from_text(llm_res.get('text', ''))
@@ -267,7 +372,12 @@ class SentimentAgent:
         output['signal'] = 'bullish' if output['score'] > 0.05 else 'bearish' if output['score'] < -0.05 else 'neutral'
         output['llm_summary'] = llm_res.get('text', '')
         output['degraded'] = llm_res.get('degraded', False)
-        output['prompt_meta'] = {'llm_model': llm_model, 'llm_enabled': llm_enabled}
+        output['prompt_meta'] = {
+            'prompt_id': prompt_info.get('prompt_id'),
+            'prompt_version': prompt_info.get('version', 0),
+            'llm_model': llm_model,
+            'llm_enabled': llm_enabled,
+        }
         return output
 
 
@@ -391,6 +501,7 @@ class TraderAgent:
     def __init__(self) -> None:
         self.llm = OllamaCloudClient()
         self.model_selector = AgentModelSelector()
+        self.prompt_service = PromptTemplateService()
 
     def run(
         self,
@@ -446,22 +557,60 @@ class TraderAgent:
         llm_enabled = self.model_selector.is_enabled(db, self.name)
         llm_model = self.model_selector.resolve(db, self.name)
         output['prompt_meta'] = {
+            'prompt_id': None,
+            'prompt_version': 0,
             'llm_enabled': llm_enabled,
             'llm_model': llm_model,
         }
         if not llm_enabled:
             return output
 
-        llm_prompt = (
-            f'Pair: {ctx.pair}\nTimeframe: {ctx.timeframe}\nDecision: {decision}\nNet score: {net_score}\n'
-            f"Bullish args: {bullish.get('arguments', [])}\nBearish args: {bearish.get('arguments', [])}\n"
-            "Rédige une note d'exécution concise en français."
+        fallback_system = "Tu es un assistant trader Forex. Résume la justification finale en note d'exécution compacte."
+        fallback_user = (
+            "Pair: {pair}\nTimeframe: {timeframe}\nDecision: {decision}\nBullish: {bullish_args}\n"
+            "Bearish: {bearish_args}\nNotes de risque: {risk_notes}\nNet score: {net_score}"
         )
+        prompt_info: dict[str, Any] = {'prompt_id': None, 'version': 0}
+        if db is not None:
+            prompt_info = self.prompt_service.render(
+                db=db,
+                agent_name=self.name,
+                fallback_system=fallback_system,
+                fallback_user=fallback_user,
+                variables={
+                    'pair': ctx.pair,
+                    'timeframe': ctx.timeframe,
+                    'decision': decision,
+                    'bullish_args': json.dumps(bullish.get('arguments', []), ensure_ascii=True),
+                    'bearish_args': json.dumps(bearish.get('arguments', []), ensure_ascii=True),
+                    'risk_notes': json.dumps([f'net_score={net_score}'], ensure_ascii=True),
+                    'net_score': net_score,
+                },
+            )
+            system_prompt = prompt_info['system_prompt']
+            user_prompt = prompt_info['user_prompt']
+        else:
+            system_prompt = fallback_system
+            user_prompt = fallback_user.format(
+                pair=ctx.pair,
+                timeframe=ctx.timeframe,
+                decision=decision,
+                bullish_args=json.dumps(bullish.get('arguments', []), ensure_ascii=True),
+                bearish_args=json.dumps(bearish.get('arguments', []), ensure_ascii=True),
+                risk_notes=json.dumps([f'net_score={net_score}'], ensure_ascii=True),
+                net_score=net_score,
+            )
         llm_res = self.llm.chat(
-            "Tu es un assistant trader Forex. Réponds en français.",
-            llm_prompt,
+            system_prompt,
+            user_prompt,
             model=llm_model,
         )
         output['execution_note'] = llm_res.get('text', '')
         output['degraded'] = llm_res.get('degraded', False)
+        output['prompt_meta'] = {
+            'prompt_id': prompt_info.get('prompt_id'),
+            'prompt_version': prompt_info.get('version', 0),
+            'llm_enabled': llm_enabled,
+            'llm_model': llm_model,
+        }
         return output

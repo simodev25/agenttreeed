@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import type { ConnectorConfig, LlmModelUsage, LlmSummary, MetaApiAccount, PromptTemplate } from '../types';
@@ -36,6 +36,36 @@ const DEFAULT_AGENT_LLM_ENABLED: Record<string, boolean> = {
   'risk-manager': false,
   'execution-manager': false,
 };
+const AGENT_PROMPT_FALLBACKS: Record<string, { system: string; user: string }> = {
+  'technical-analyst': {
+    system: 'Tu es un analyste technique Forex.',
+    user: 'Pair: {pair}\nTimeframe: {timeframe}\nTrend: {trend}\nRSI: {rsi}\nMACD diff: {macd_diff}\nPrix: {last_price}',
+  },
+  'news-analyst': {
+    system: 'Tu es un analyste news Forex.',
+    user: 'Pair: {pair}\nTimeframe: {timeframe}\nMémoires pertinentes:\n{memory_context}\nTitres:\n{headlines}',
+  },
+  'macro-analyst': {
+    system: 'Tu es un analyste macro Forex.',
+    user: 'Pair: {pair}\nTimeframe: {timeframe}\nTrend: {trend}\nATR ratio: {atr_ratio}\nVolatilité: {volatility}',
+  },
+  'sentiment-agent': {
+    system: 'Tu es un analyste sentiment Forex.',
+    user: 'Pair: {pair}\nTimeframe: {timeframe}\nChange pct: {change_pct}\nTrend: {trend}',
+  },
+  'bullish-researcher': {
+    system: 'Tu es un chercheur Forex haussier.',
+    user: 'Pair: {pair}\nTimeframe: {timeframe}\nSignals: {signals_json}\nMémoire:\n{memory_context}',
+  },
+  'bearish-researcher': {
+    system: 'Tu es un chercheur Forex baissier.',
+    user: 'Pair: {pair}\nTimeframe: {timeframe}\nSignals: {signals_json}\nMémoire:\n{memory_context}',
+  },
+  'trader-agent': {
+    system: "Tu es un assistant trader Forex. Résume la note d'exécution.",
+    user: 'Pair: {pair}\nTimeframe: {timeframe}\nDecision: {decision}\nBullish: {bullish_args}\nBearish: {bearish_args}\nNotes: {risk_notes}',
+  },
+};
 
 export function ConnectorsPage() {
   const { token } = useAuth();
@@ -64,9 +94,10 @@ export function ConnectorsPage() {
   const [accountId, setAccountId] = useState('');
   const [accountRegion, setAccountRegion] = useState('new-york');
 
-  const [promptAgent, setPromptAgent] = useState('bullish-researcher');
-  const [promptSystem, setPromptSystem] = useState('You are a bullish forex researcher.');
-  const [promptUser, setPromptUser] = useState('Pair: {pair}\nSignals: {signals_json}\nMemory: {memory_context}');
+  const [promptAgent, setPromptAgent] = useState('news-analyst');
+  const [promptSystem, setPromptSystem] = useState(AGENT_PROMPT_FALLBACKS['news-analyst'].system);
+  const [promptUser, setPromptUser] = useState(AGENT_PROMPT_FALLBACKS['news-analyst'].user);
+  const [promptSaving, setPromptSaving] = useState(false);
 
   const [memoryPair, setMemoryPair] = useState('EURUSD');
   const [memoryTimeframe, setMemoryTimeframe] = useState('H1');
@@ -127,6 +158,26 @@ export function ConnectorsPage() {
   useEffect(() => {
     void loadAll();
   }, [token]);
+
+  const activePromptByAgent = useMemo(() => {
+    const map = new Map<string, PromptTemplate>();
+    for (const prompt of prompts) {
+      if (prompt.is_active && !map.has(prompt.agent_name)) {
+        map.set(prompt.agent_name, prompt);
+      }
+    }
+    return map;
+  }, [prompts]);
+
+  useEffect(() => {
+    const active = activePromptByAgent.get(promptAgent);
+    const fallback = AGENT_PROMPT_FALLBACKS[promptAgent] ?? {
+      system: `Tu es l'agent ${promptAgent}.`,
+      user: 'Pair: {pair}\nTimeframe: {timeframe}\nContexte: {context}',
+    };
+    setPromptSystem(active?.system_prompt ?? fallback.system);
+    setPromptUser(active?.user_prompt_template ?? fallback.user);
+  }, [promptAgent, activePromptByAgent]);
 
   const toggleConnector = async (connector: ConnectorConfig) => {
     if (!token) return;
@@ -217,14 +268,18 @@ export function ConnectorsPage() {
     e.preventDefault();
     if (!token) return;
     try {
-      await api.createPrompt(token, {
+      setPromptSaving(true);
+      const created = (await api.createPrompt(token, {
         agent_name: promptAgent,
         system_prompt: promptSystem,
         user_prompt_template: promptUser,
-      });
+      })) as PromptTemplate;
+      await api.activatePrompt(token, created.id);
       await loadAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Cannot create prompt');
+    } finally {
+      setPromptSaving(false);
     }
   };
 
@@ -357,6 +412,7 @@ export function ConnectorsPage() {
                 <th>LLM actif</th>
                 <th>Modèle</th>
                 <th>LLM effectif</th>
+                <th>Prompt</th>
               </tr>
             </thead>
             <tbody>
@@ -382,6 +438,17 @@ export function ConnectorsPage() {
                   </td>
                   <td>
                     <code>{effectiveModelFor(agentName)}</code>
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPromptAgent(agentName);
+                        document.getElementById('agent-prompts-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }}
+                    >
+                      Éditer prompt
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -439,12 +506,18 @@ export function ConnectorsPage() {
         </table>
       </section>
 
-      <section className="card">
-        <h3>Prompts versionnés</h3>
+      <section className="card" id="agent-prompts-editor">
+        <h3>Prompts versionnés (par agent)</h3>
         <form className="form-grid" onSubmit={createPrompt}>
           <label>
             Agent
-            <input value={promptAgent} onChange={(e) => setPromptAgent(e.target.value)} />
+            <select value={promptAgent} onChange={(e) => setPromptAgent(e.target.value)}>
+              {ORCHESTRATION_AGENTS.map((agentName) => (
+                <option key={agentName} value={agentName}>
+                  {agentName}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             System prompt
@@ -454,8 +527,11 @@ export function ConnectorsPage() {
             User template
             <textarea value={promptUser} onChange={(e) => setPromptUser(e.target.value)} rows={4} />
           </label>
-          <button>Créer version</button>
+          <button disabled={promptSaving}>{promptSaving ? 'Enregistrement...' : 'Créer + activer version'}</button>
         </form>
+        <p className="model-source">
+          Agent sélectionné: <code>{promptAgent}</code> | version active: <code>v{activePromptByAgent.get(promptAgent)?.version ?? 0}</code>
+        </p>
         <table>
           <thead>
             <tr>

@@ -13,6 +13,16 @@ LANGUAGE_DIRECTIVE = (
 )
 
 DEFAULT_PROMPTS: dict[str, dict[str, str]] = {
+    'technical-analyst': {
+        'system': (
+            "Tu es un analyste technique Forex. "
+            "Retourne un biais bullish, bearish ou neutral avec justification courte."
+        ),
+        'user': (
+            "Pair: {pair}\nTimeframe: {timeframe}\nTrend: {trend}\nRSI: {rsi}\nMACD diff: {macd_diff}\n"
+            "Prix: {last_price}\nRéponds avec biais + justification concise."
+        ),
+    },
     'news-analyst': {
         'system': (
             "Tu es un analyste news Forex. "
@@ -35,6 +45,20 @@ DEFAULT_PROMPTS: dict[str, dict[str, str]] = {
         'user': (
             "Pair: {pair}\nTimeframe: {timeframe}\nSignals: {signals_json}\nMémoire long-terme:\n{memory_context}\n"
             "Produit des arguments baissiers concis et les risques d'invalidation."
+        ),
+    },
+    'macro-analyst': {
+        'system': "Tu es un analyste macro Forex. Donne un biais macro bullish, bearish ou neutral.",
+        'user': (
+            "Pair: {pair}\nTimeframe: {timeframe}\nTrend: {trend}\nATR ratio: {atr_ratio}\n"
+            "Volatilité: {volatility}\nRéponds avec biais + justification courte."
+        ),
+    },
+    'sentiment-agent': {
+        'system': "Tu es un analyste sentiment Forex. Donne un biais bullish, bearish ou neutral.",
+        'user': (
+            "Pair: {pair}\nTimeframe: {timeframe}\nChange pct: {change_pct}\nTrend: {trend}\n"
+            "Réponds avec biais + justification concise."
         ),
     },
     'trader-agent': {
