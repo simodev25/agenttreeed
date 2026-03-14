@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -12,6 +14,7 @@ from app.services.orchestrator.engine import ForexOrchestrator
 from app.tasks.run_analysis_task import execute as run_analysis_task
 
 router = APIRouter(prefix='/runs', tags=['runs'])
+logger = logging.getLogger(__name__)
 
 
 @router.get('', response_model=list[RunOut])
@@ -70,7 +73,7 @@ async def create_run(
             db.refresh(run)
             return RunOut.model_validate(run)
         except Exception:
-            pass
+            logger.warning('run enqueue failed; falling back to in-request execution run_id=%s', run.id, exc_info=True)
 
     orchestrator = ForexOrchestrator()
     run = await orchestrator.execute(db, run, payload.risk_percent, metaapi_account_ref=payload.metaapi_account_ref)

@@ -6,7 +6,7 @@ import math
 from typing import Any
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -149,14 +149,29 @@ class VectorMemoryService:
                 results = self._qdrant.search(
                     collection_name=self.collection,
                     query_vector=query_embedding,
+                    query_filter=Filter(
+                        must=[
+                            FieldCondition(key='pair', match=MatchValue(value=pair)),
+                            FieldCondition(key='timeframe', match=MatchValue(value=timeframe)),
+                        ]
+                    ),
                     limit=limit,
                     with_payload=True,
                 )
                 memory_ids = [int(item.id) for item in results]
                 if memory_ids:
-                    entries = db.query(MemoryEntry).filter(MemoryEntry.id.in_(memory_ids)).all()
+                    entries = (
+                        db.query(MemoryEntry)
+                        .filter(
+                            MemoryEntry.id.in_(memory_ids),
+                            MemoryEntry.pair == pair,
+                            MemoryEntry.timeframe == timeframe,
+                        )
+                        .all()
+                    )
                     by_id = {entry.id: entry for entry in entries}
                     ordered = [by_id[mid] for mid in memory_ids if mid in by_id]
+                    score_by_id = {int(item.id): float(item.score) for item in results}
                     return [
                         {
                             'id': entry.id,
@@ -164,7 +179,7 @@ class VectorMemoryService:
                             'timeframe': entry.timeframe,
                             'summary': entry.summary,
                             'source_type': entry.source_type,
-                            'score': next((float(item.score) for item in results if int(item.id) == entry.id), 0.0),
+                            'score': score_by_id.get(entry.id, 0.0),
                         }
                         for entry in ordered
                     ]

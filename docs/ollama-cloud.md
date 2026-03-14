@@ -5,7 +5,7 @@
 - `OLLAMA_BASE_URL`
   - Exemples valides: `https://api.ollama.com` ou `https://ollama.com`
 - `OLLAMA_API_KEY`
-- `OLLAMA_MODEL` (fallback global)
+- `OLLAMA_MODEL` (modèle de repli global)
 - `OLLAMA_TIMEOUT_SECONDS`
 - `OLLAMA_INPUT_COST_PER_1M_TOKENS`
 - `OLLAMA_OUTPUT_COST_PER_1M_TOKENS`
@@ -26,7 +26,7 @@
 
 La configuration est stockée dans `connector_configs` (`connector_name=ollama`, champ `settings`):
 
-- `default_model`: modèle fallback global.
+- `default_model`: modèle de repli global.
 - `agent_models`: override de modèle par agent.
 - `agent_llm_enabled`: switch bool par agent.
 
@@ -56,7 +56,7 @@ UI associée: Trading Control Room -> `Config` -> `Modèles LLM par agent`.
 ## Endpoints utiles
 
 - `GET /api/v1/connectors/ollama/models`
-  - Lit le catalogue modèles depuis `{OLLAMA_BASE_URL}/api/tags`, fallback `https://ollama.com/api/tags`.
+  - Lit le catalogue modèles depuis `{OLLAMA_BASE_URL}/api/tags`, puis repli `https://ollama.com/api/tags`.
 - `POST /api/v1/connectors/ollama/test`
   - Test de connectivité minimal.
 - `GET /api/v1/analytics/llm-summary`

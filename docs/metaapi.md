@@ -10,7 +10,7 @@
 - `METAAPI_AUTH_HEADER` (par défaut `auth-token`)
 - `METAAPI_SYMBOL_SUFFIX` (ex: `.pro`)
 - `ENABLE_METAAPI_REAL_TRADES_DASHBOARD` (`true|false`, active la vue trades MT5 réels + graphes)
-- `METAAPI_USE_SDK_FOR_MARKET_DATA` (`false` recommandé pour éviter la limite de subscriptions SDK sur deals/history)
+- `METAAPI_USE_SDK_FOR_MARKET_DATA` (`false` recommandé pour éviter la limite d'abonnements SDK sur deals/history)
 
 Variables UI associées (`frontend/.env`):
 - `VITE_ENABLE_METAAPI_REAL_TRADES_DASHBOARD`
@@ -42,14 +42,14 @@ Compatibilité alias legacy (déjà supportée):
 ## Modes d'exécution
 
 - `simulation`: aucune requête broker.
-- `paper`: tentative MetaApi, fallback simulation si rejet/indispo.
+- `paper`: tentative MetaApi, repli simulation si rejet/indispo.
 - `live`: bloqué par défaut (`ALLOW_LIVE_TRADING=false`).
 
 ## Flux d'exécution
 
 1. `ExecutionService` applique les garde-fous mode.
 2. `MetaApiAccountSelector` choisit le compte (default ou explicite).
-3. `MetaApiClient` tente SDK (`metaapi_cloud_sdk`), puis fallback REST.
+3. `MetaApiClient` tente SDK (`metaapi_cloud_sdk`), puis repli REST.
 4. Résultat normalisé stocké dans `execution_orders.response_payload`.
 
 ## Endpoints utiles
@@ -62,12 +62,16 @@ Compatibilité alias legacy (déjà supportée):
 - `GET /api/v1/trading/orders`
 - `GET /api/v1/trading/deals` (`days` accepte `0..365`)
 - `GET /api/v1/trading/history-orders` (`days` accepte `0..365`)
+- `GET /api/v1/memory` (`limit` borne `1..200`)
 
 ## Fenêtre temporelle deals/history
 
 - `days=0`: aujourd'hui, de `00:00:00 UTC` à maintenant.
 - `days>=1`: fenêtre glissante sur `N` jours.
 - Le backend filtre strictement les timestamps dans la fenêtre sélectionnée.
+- En UI, l'indicateur `Sync in progress` signifie:
+  - `yes`: synchronisation historique MetaApi en cours.
+  - `no`: pas de synchronisation active au moment de l'appel.
 - En UI, les tableaux affichent une colonne `Ticket` (deal/order) pour faciliter la réconciliation MT5.
 
 ## Multi-comptes
@@ -83,7 +87,7 @@ Compatibilité alias legacy (déjà supportée):
   - vérifier `METAAPI_AUTH_HEADER=auth-token` et le token exact.
 - `Unknown trade return code`
   - MetaApi n'a pas confirmé explicitement l'exécution.
-  - en mode `paper`, fallback simulation possible.
+  - en mode `paper`, repli simulation possible.
 - `tradeMode=SYMBOL_TRADE_MODE_DISABLED`
   - instrument désactivé sur ce compte.
   - changer de symbole (suffixe inclus) ou de compte.

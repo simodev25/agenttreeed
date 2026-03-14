@@ -54,24 +54,24 @@ def list_ollama_models(
         headers['Authorization'] = f'Bearer {api_key}'
 
     errors: list[str] = []
-    for url in unique_urls:
-        try:
-            with httpx.Client(timeout=timeout) as client:
+    with httpx.Client(timeout=timeout) as client:
+        for url in unique_urls:
+            try:
                 response = client.get(url, headers=headers)
                 response.raise_for_status()
                 payload = response.json() if response.content else {}
-            models = payload.get('models', [])
-            names: list[str] = []
-            if isinstance(models, list):
-                for item in models:
-                    if not isinstance(item, dict):
-                        continue
-                    name = item.get('name') or item.get('model')
-                    if isinstance(name, str) and name.strip():
-                        names.append(name.strip())
-            return {'models': sorted(set(names)), 'source': url}
-        except Exception as exc:  # pragma: no cover - network failures are expected in local/offline runs
-            errors.append(f'{url}: {exc}')
+                models = payload.get('models', [])
+                names: list[str] = []
+                if isinstance(models, list):
+                    for item in models:
+                        if not isinstance(item, dict):
+                            continue
+                        name = item.get('name') or item.get('model')
+                        if isinstance(name, str) and name.strip():
+                            names.append(name.strip())
+                return {'models': sorted(set(names)), 'source': url}
+            except Exception as exc:  # pragma: no cover - network failures are expected in local/offline runs
+                errors.append(f'{url}: {exc}')
 
     return {'models': [], 'source': None, 'error': '; '.join(errors[:2])}
 

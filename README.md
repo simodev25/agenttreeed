@@ -5,17 +5,17 @@ Plateforme IA multi-agent dédiée au Forex avec:
 - API FastAPI sécurisée (JWT + RBAC)
 - Intégration Ollama Cloud (LLM), MetaApi (trading), yfinance (news + contexte)
 - Séparation simulation / paper / live (live désactivé par défaut)
-- Frontend React TypeScript dark premium
-- Asynchrone Celery + RabbitMQ + Redis
+- Frontend React TypeScript (thème sombre premium)
+- Exécution asynchrone via Celery + RabbitMQ + Redis
 - Observabilité minimale (Prometheus + Grafana)
 - Docker Compose local + Helm minimal
-- Mémoire long-terme vectorielle (Qdrant + pgvector fallback)
+- Mémoire long-terme vectorielle (Qdrant + repli SQL cosine, pgvector optionnel)
 - Prompts versionnés en base pour enrichir le débat agents
 - Configuration LLM par agent (switch, modèle effectif, catalogue modèles, prompts modifiables)
-- Trading Control Room (menu `Config`): configuration connecteurs, comptes MetaApi, prompts et telemetry LLM
+- Trading Control Room (menu `Config`): configuration connecteurs, comptes MetaApi, prompts et télémétrie LLM
 - Backtesting avancé (Sharpe, Sortino, drawdown, profit factor)
 - Support multi-comptes MetaApi
-- Dashboard Grafana enrichi latence/coûts LLM
+- Dashboard Grafana enrichi (latence/coûts LLM)
 
 ## Structure
 
@@ -50,11 +50,12 @@ docker compose up --build
 Compte seed local:
 - email: `admin@local.dev`
 - mot de passe: `admin1234`
+- usage local uniquement (dev/test), à changer avant tout environnement exposé.
 
 ## Modes d'exécution
 
 - `simulation`: exécution simulée locale
-- `paper`: tentative MetaApi, fallback simulation si indisponible
+- `paper`: tentative MetaApi, repli simulation si indisponible
 - `live`: bloqué par défaut (`ALLOW_LIVE_TRADING=false`)
 
 ## API principales
@@ -74,14 +75,19 @@ Compte seed local:
 - `GET /api/v1/connectors/ollama/models`
 - `GET/POST /api/v1/prompts`
 - `POST /api/v1/prompts/{id}/activate`
+- `GET /api/v1/memory`
 - `POST /api/v1/memory/search`
 - `GET/POST /api/v1/backtests`
 - `GET /api/v1/analytics/llm-summary`
 - `GET /api/v1/analytics/llm-models`
 
+Bornes utiles (anti-abus):
+- `GET /api/v1/trading/orders?limit=...` (`1..500`)
+- `GET /api/v1/memory?limit=...` (`1..200`)
+
 Paramètre `.env` pour activer la vue trades MT5 réels (tables + graphes):
 - `ENABLE_METAAPI_REAL_TRADES_DASHBOARD=true`
-- `METAAPI_USE_SDK_FOR_MARKET_DATA=false` (recommandé pour limiter les subscriptions MetaApi)
+- `METAAPI_USE_SDK_FOR_MARKET_DATA=false` (recommandé pour limiter les abonnements SDK MetaApi)
 - `CELERY_WORKER_CONCURRENCY=2` (stabilité locale)
 
 Paramètres `.env` UI (`frontend/.env`) pour la même vue:

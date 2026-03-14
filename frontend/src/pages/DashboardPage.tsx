@@ -8,6 +8,17 @@ const PAIRS = ['EURUSD', 'GBPUSD', 'USDJPY', 'USDCHF', 'AUDUSD', 'USDCAD', 'NZDU
 const TIMEFRAMES = ['M5', 'M15', 'H1', 'H4', 'D1'];
 const ACTIVE_STATUSES = new Set(['queued', 'running', 'pending']);
 
+function parseApiDateMs(value: string): number {
+  const raw = String(value ?? '').trim();
+  if (!raw) return Number.NaN;
+
+  const normalized = raw.includes(' ') ? raw.replace(' ', 'T') : raw;
+  const hasTimezone = /([zZ]|[+-]\d{2}:\d{2})$/.test(normalized);
+  const asUtc = hasTimezone ? normalized : `${normalized}Z`;
+  const ts = Date.parse(asUtc);
+  return Number.isFinite(ts) ? ts : Number.NaN;
+}
+
 function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const hours = Math.floor(totalSeconds / 3600);
@@ -20,8 +31,8 @@ function formatDuration(ms: number): string {
 }
 
 function runElapsed(run: Run, nowMs: number): string {
-  const started = new Date(run.created_at).getTime();
-  const finished = new Date(run.updated_at).getTime();
+  const started = parseApiDateMs(run.created_at);
+  const finished = parseApiDateMs(run.updated_at);
   const end = ACTIVE_STATUSES.has(run.status) ? nowMs : finished;
   if (!Number.isFinite(started) || !Number.isFinite(end) || end < started) return '-';
   return formatDuration(end - started);

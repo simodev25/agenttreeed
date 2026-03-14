@@ -49,8 +49,8 @@
 
 - Après run complété: résumé stocké dans `memory_entries`.
 - Recherche mémoire:
-  - Qdrant prioritaire (collection configurable),
-  - fallback SQL cosine si Qdrant indisponible.
+  - Qdrant prioritaire (collection configurable), avec filtre strict `pair` + `timeframe`,
+  - repli SQL cosine si Qdrant indisponible.
 
 ## Mode dégradé
 

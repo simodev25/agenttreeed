@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.security import Role, require_roles
@@ -12,7 +12,7 @@ router = APIRouter(prefix='/memory', tags=['memory'])
 
 @router.get('', response_model=list[MemoryOut])
 def list_memory(
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
     _=Depends(require_roles(Role.SUPER_ADMIN, Role.ADMIN, Role.TRADER_OPERATOR, Role.ANALYST, Role.VIEWER)),
 ) -> list[MemoryOut]:

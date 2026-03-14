@@ -1,9 +1,12 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, Suspense, lazy, useEffect, useState } from 'react';
 import { api } from '../api/client';
-import { RealTradesCharts } from '../components/RealTradesCharts';
 import { runtimeConfig } from '../config/runtime';
 import { useAuth } from '../hooks/useAuth';
 import type { ExecutionOrder, MetaApiAccount, MetaApiDeal, MetaApiHistoryOrder, MetaApiOpenOrder, MetaApiPosition } from '../types';
+
+const RealTradesCharts = lazy(() =>
+  import('../components/RealTradesCharts').then((module) => ({ default: module.RealTradesCharts })),
+);
 
 const REFRESH_DEBOUNCE_MS = 1200;
 const DEALS_PER_PAGE = 10;
@@ -345,7 +348,9 @@ export function OrdersPage() {
                 )}
               </tbody>
             </table>
-            <RealTradesCharts deals={deals} historyOrders={historyOrders} />
+            <Suspense fallback={<p className="model-source">Chargement des graphiques...</p>}>
+              <RealTradesCharts deals={deals} historyOrders={historyOrders} />
+            </Suspense>
             <h3>Deals exécutés</h3>
             <table>
               <thead>

@@ -11,13 +11,13 @@ docker compose up -d --build
 
 Couverture actuelle:
 
-- unit tests:
+- tests unitaires:
   - règles de risque
   - décision trader
   - orchestration
   - backtest engine
   - prompts versionnés
-- integration API:
+- tests d'intégration API:
   - auth/login
   - runs
   - backtests
@@ -37,7 +37,7 @@ docker compose exec backend pytest -q
 docker compose exec frontend npm run build
 ```
 
-- e2e smoke (Playwright):
+- smoke e2e (Playwright):
 
 ```bash
 docker compose exec frontend npm run test:e2e
@@ -109,7 +109,7 @@ docker compose up -d --build worker
 docker compose up -d --build frontend
 ```
 
-## Scale workers Celery
+## Mise à l'échelle des workers Celery
 
 ```bash
 docker compose up -d --scale worker=3 worker

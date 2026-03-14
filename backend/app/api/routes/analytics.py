@@ -10,6 +10,13 @@ from app.services.analytics.llm_analytics import LlmAnalyticsService
 router = APIRouter(prefix='/analytics', tags=['analytics'])
 
 
+def _as_float(value: object) -> float:
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 @router.get('/llm-summary', response_model=LlmAnalyticsSummary)
 def llm_summary(
     days: int | None = Query(default=30, ge=1, le=3650),
@@ -37,20 +44,20 @@ def backtests_summary(
     db: Session = Depends(get_db),
     _=Depends(require_roles(Role.SUPER_ADMIN, Role.ADMIN, Role.TRADER_OPERATOR, Role.ANALYST, Role.VIEWER)),
 ) -> dict:
-    completed = db.query(BacktestRun).filter(BacktestRun.status == 'completed').all()
-    count = len(completed)
+    count = 0
+    return_sum = 0.0
+    drawdown_sum = 0.0
 
-    avg_return = (
-        sum(float(run.metrics.get('total_return_pct', 0.0)) for run in completed) / count
-        if count
-        else 0.0
-    )
+    metrics_rows = db.query(BacktestRun.metrics).filter(BacktestRun.status == 'completed')
+    for (metrics,) in metrics_rows:
+        if not isinstance(metrics, dict):
+            continue
+        count += 1
+        return_sum += _as_float(metrics.get('total_return_pct', 0.0))
+        drawdown_sum += _as_float(metrics.get('max_drawdown_pct', 0.0))
 
-    avg_drawdown = (
-        sum(float(run.metrics.get('max_drawdown_pct', 0.0)) for run in completed) / count
-        if count
-        else 0.0
-    )
+    avg_return = (return_sum / count) if count else 0.0
+    avg_drawdown = (drawdown_sum / count) if count else 0.0
 
     return {
         'total_backtests': count,

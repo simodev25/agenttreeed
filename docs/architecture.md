@@ -35,13 +35,13 @@ flowchart LR
 
 - `backend/app/api`: routes REST (`/runs`, `/backtests`, `/connectors`, `/prompts`, `/analytics`, `/trading`).
 - `backend/app/services/orchestrator`: orchestration multi-agent et persistence `agent_steps`.
-- `backend/app/services/llm`: client Ollama avec retries + logs coût/latence + fallback.
+- `backend/app/services/llm`: client Ollama avec tentatives automatiques + logs coût/latence + mode dégradé.
 - `backend/app/services/market`: provider yfinance (snapshot, historique, news).
-- `backend/app/services/trading`: MetaApi SDK puis fallback REST.
+- `backend/app/services/trading`: MetaApi SDK puis repli REST.
 - `backend/app/services/execution`: séparation `simulation`, `paper`, `live`.
 - `backend/app/services/risk`: règles de taille/risque et blocages.
 - `backend/app/services/prompts`: prompts versionnés/activables en base.
-- `backend/app/services/memory`: mémoire vectorielle (Qdrant + fallback SQL cosine).
+- `backend/app/services/memory`: mémoire vectorielle (Qdrant + repli SQL cosine), filtrée par `pair` et `timeframe`.
 - `backend/app/services/backtest`: stratégies `agents_v1` et `ema_rsi`.
 
 ## Flux run (temps réel)
@@ -97,9 +97,9 @@ Tables cœur de plateforme:
 
 ## Modes dégradés
 
-- Ollama indisponible/401: réponse `degraded=true`, fallback déterministe, run continue.
+- Ollama indisponible/401: réponse `degraded=true`, repli déterministe, run continue.
 - MetaApi indisponible/rejet trade:
-  - mode `paper`: fallback simulation (`paper_fallback=true`);
+  - mode `paper`: repli simulation (`paper_fallback=true`);
   - mode `live`: ordre refusé, jamais simulé silencieusement.
 - yfinance indisponible: snapshot/news dégradés, orchestration continue.
-- Qdrant indisponible: recherche mémoire fallback SQL (cosine locale).
+- Qdrant indisponible: recherche mémoire en repli SQL (cosine locale).

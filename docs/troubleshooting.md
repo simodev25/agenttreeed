@@ -1,5 +1,23 @@
 # Troubleshooting
 
+## `Temps running` affiche `+1h` dans l'UI
+
+Symptôme:
+
+- La durée affichée semble commencer avec une heure en plus (ex: `1h 00m 00s`).
+
+Cause:
+
+- Interprétation locale d'un timestamp backend sans timezone explicite.
+
+Fix:
+
+- Le front interprète désormais les timestamps backend sans timezone comme UTC.
+- Rebuild frontend si nécessaire:
+```bash
+docker compose up -d --build frontend
+```
+
 ## Celery ne démarre pas (`cors_origins` parse error)
 
 Symptôme:
@@ -109,7 +127,7 @@ Sens:
 
 Comportement plateforme:
 
-- en `paper`: fallback simulation possible.
+- en `paper`: repli simulation possible.
 - en `live`: run en erreur d'exécution.
 
 ## `tradeMode=SYMBOL_TRADE_MODE_DISABLED`

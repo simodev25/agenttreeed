@@ -16,7 +16,7 @@ metaapi_client = MetaApiClient()
 
 @router.get('/orders', response_model=list[ExecutionOrderOut])
 def list_orders(
-    limit: int = 100,
+    limit: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
     _=Depends(require_roles(Role.SUPER_ADMIN, Role.ADMIN, Role.TRADER_OPERATOR, Role.ANALYST, Role.VIEWER)),
 ) -> list[ExecutionOrderOut]:
@@ -102,7 +102,6 @@ async def account_info(
     account = _get_account_or_none(db, account_ref)
     account_id = account.account_id if account else None
     region = account.region if account else None
-    db.close()
     return await metaapi_client.get_account_information(
         account_id=account_id,
         region=region,
@@ -118,7 +117,6 @@ async def positions(
     account = _get_account_or_none(db, account_ref)
     account_id = account.account_id if account else None
     region = account.region if account else None
-    db.close()
     return await metaapi_client.get_positions(
         account_id=account_id,
         region=region,
@@ -134,7 +132,6 @@ async def open_orders(
     account = _get_account_or_none(db, account_ref)
     account_id = account.account_id if account else None
     region = account.region if account else None
-    db.close()
     return await metaapi_client.get_open_orders(
         account_id=account_id,
         region=region,
@@ -159,7 +156,6 @@ async def deals(
     account = _get_account_or_none(db, account_ref)
     account_id = account.account_id if account else None
     region = account.region if account else None
-    db.close()
     return await metaapi_client.get_deals(
         account_id=account_id,
         region=region,
@@ -187,7 +183,6 @@ async def history_orders(
     account = _get_account_or_none(db, account_ref)
     account_id = account.account_id if account else None
     region = account.region if account else None
-    db.close()
     return await metaapi_client.get_history_orders(
         account_id=account_id,
         region=region,

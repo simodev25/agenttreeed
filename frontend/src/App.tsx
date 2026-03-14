@@ -1,12 +1,28 @@
+import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { AuthProvider, useAuth } from './hooks/useAuth';
-import { ConnectorsPage } from './pages/ConnectorsPage';
-import { BacktestsPage } from './pages/BacktestsPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { LoginPage } from './pages/LoginPage';
-import { OrdersPage } from './pages/OrdersPage';
-import { RunDetailPage } from './pages/RunDetailPage';
+
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })));
+const BacktestsPage = lazy(() => import('./pages/BacktestsPage').then((module) => ({ default: module.BacktestsPage })));
+const RunDetailPage = lazy(() => import('./pages/RunDetailPage').then((module) => ({ default: module.RunDetailPage })));
+const OrdersPage = lazy(() => import('./pages/OrdersPage').then((module) => ({ default: module.OrdersPage })));
+const ConnectorsPage = lazy(() => import('./pages/ConnectorsPage').then((module) => ({ default: module.ConnectorsPage })));
+const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
+
+function RouteLoader() {
+  return <div className="loading-screen">Chargement...</div>;
+}
+
+function withLayout(element: React.ReactNode): React.ReactNode {
+  return (
+    <Protected>
+      <Layout>
+        <Suspense fallback={<RouteLoader />}>{element}</Suspense>
+      </Layout>
+    </Protected>
+  );
+}
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth();
@@ -21,53 +37,23 @@ function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/"
-        element={
-          <Protected>
-            <Layout>
-              <DashboardPage />
-            </Layout>
-          </Protected>
-        }
+        element={withLayout(<DashboardPage />)}
       />
       <Route
         path="/backtests"
-        element={
-          <Protected>
-            <Layout>
-              <BacktestsPage />
-            </Layout>
-          </Protected>
-        }
+        element={withLayout(<BacktestsPage />)}
       />
       <Route
         path="/runs/:runId"
-        element={
-          <Protected>
-            <Layout>
-              <RunDetailPage />
-            </Layout>
-          </Protected>
-        }
+        element={withLayout(<RunDetailPage />)}
       />
       <Route
         path="/orders"
-        element={
-          <Protected>
-            <Layout>
-              <OrdersPage />
-            </Layout>
-          </Protected>
-        }
+        element={withLayout(<OrdersPage />)}
       />
       <Route
         path="/connectors"
-        element={
-          <Protected>
-            <Layout>
-              <ConnectorsPage />
-            </Layout>
-          </Protected>
-        }
+        element={withLayout(<ConnectorsPage />)}
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -77,7 +63,9 @@ function AppRoutes() {
 export function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <Suspense fallback={<RouteLoader />}>
+        <AppRoutes />
+      </Suspense>
     </AuthProvider>
   );
 }
