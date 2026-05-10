@@ -185,6 +185,50 @@ def _msg_to_dict(msg: Msg | None, tool_invocations: dict | None = None) -> dict[
 
     return result
 
+
+def _build_phase1_degraded_msg(agent_name: str, reason: str) -> Msg:
+    """Build a safe degraded fallback message for Phase 1 analysts.
+
+    This is used when a Phase 1 agent fails (timeout/exception) so the pipeline
+    can continue in graceful degradation mode.
+    """
+    safe_reason = (reason or "unknown_error")[:240]
+
+    if agent_name == "technical-analyst":
+        metadata = {
+            "structural_bias": "neutral",
+            "local_momentum": "neutral",
+            "setup_quality": "none",
+            "key_levels": [],
+            "patterns_found": [],
+            "contradictions": [safe_reason],
+            "summary": "Degraded mode: technical analysis unavailable.",
+            "tradability": "low",
+            "degraded": True,
+            "degraded_reason": safe_reason,
+        }
+    elif agent_name == "news-analyst":
+        metadata = {
+            "sentiment": "neutral",
+            "coverage": "none",
+            "key_drivers": [],
+            "risk_events": [safe_reason],
+            "summary": "Degraded mode: news analysis unavailable.",
+            "degraded": True,
+            "degraded_reason": safe_reason,
+        }
+    else:  # market-context-analyst
+        metadata = {
+            "regime": "unknown",
+            "session_quality": "low",
+            "execution_risk": "high",
+            "summary": "Degraded mode: market context unavailable.",
+            "degraded": True,
+            "degraded_reason": safe_reason,
+        }
+
+    return Msg(agent_name, metadata["summary"], "assistant", metadata=metadata)
+
 class AgentScopeRegistry:
     """Orchestrates 8 trading agents through 4 phases."""
 
@@ -1414,7 +1458,21 @@ class AgentScopeRegistry:
 
             # Use fanout for LLM agents, gather for mixed
             phase1_tasks = [_call_agent(n, context_msg) for n in analyst_names]
-            phase1_results = await asyncio.gather(*phase1_tasks)
+            phase1_raw_results = await asyncio.gather(*phase1_tasks, return_exceptions=True)
+            phase1_results: list[Msg] = []
+
+            for i, name in enumerate(analyst_names):
+                raw = phase1_raw_results[i] if i < len(phase1_raw_results) else RuntimeError("missing_phase1_result")
+                if isinstance(raw, Exception):
+                    reason = f"{type(raw).__name__}: {raw}"
+                    logger.warning(
+                        "Phase 1 agent %s failed, switching to degraded mode and continuing pipeline: %s",
+                        name,
+                        reason,
+                    )
+                    phase1_results.append(_build_phase1_degraded_msg(name, reason))
+                else:
+                    phase1_results.append(raw)
             phase1_ms = (time.time() - t0) * 1000
 
             for i, name in enumerate(analyst_names):
