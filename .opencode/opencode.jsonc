@@ -155,6 +155,21 @@
       "type": "local",
       "command": ["npx", "-y", "puppeteer-mcp-server"],
       "enabled": false                         // enable for browser tests and UI screenshots
+    },
+
+    // ── SocratiCode ──────────────────────────────────────────────────────────
+    // Codebase intelligence engine: hybrid semantic + BM25 search,
+    // polyglot dependency graphs, symbol-level impact analysis & call-flow,
+    // interactive HTML graph explorer, cross-project & branch-aware search.
+    // Zero config — runs Qdrant + Ollama via Docker automatically.
+    //
+    // Usage: ask "Index this codebase" on first use, then search/graph/impact.
+    // Prereq: Docker running.
+    // https://github.com/giancarloerra/socraticode
+    "socraticode": {
+      "type": "local",
+      "command": ["npx", "-y", "socraticode"],
+      "enabled": true
     }
   },
 
