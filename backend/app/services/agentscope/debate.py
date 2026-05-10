@@ -78,16 +78,25 @@ async def run_debate(
             Msg(
                 "user",
                 "You have heard both sides of the debate. You MUST pick a winner.\n\n"
+                "Apply your JUDGMENT FRAMEWORK:\n"
+                "1. Which side has stronger STRUCTURAL + MOMENTUM evidence (tiers 1-2)?\n"
+                "2. Which thesis is more COHERENT with the current market regime?\n"
+                "3. Which side has more PRECISE invalidation conditions?\n"
+                "4. Which side honestly acknowledged its weaknesses?\n\n"
                 "Conviction guide:\n"
-                "- 'strong': one side has clear momentum + structure + catalyst alignment\n"
-                "- 'moderate': one side has better evidence but with some contradictions\n"
-                "- 'weak': one side is slightly better but edge is thin\n"
+                "- 'strong': one side has clear structural + momentum alignment, "
+                "regime-coherent thesis, and precise invalidation\n"
+                "- 'moderate': one side has better evidence but with some contradictions "
+                "or missing momentum confirmation\n"
+                "- 'weak': one side is slightly better but edge is thin, or both sides "
+                "rely mainly on tier 3-5 evidence\n"
                 "- 'no_edge': genuinely no directional evidence at all (rare — most markets lean)\n\n"
                 "Rules:\n"
                 "- Pick 'bullish' if the bull case has stronger confirmed evidence\n"
                 "- Pick 'bearish' if the bear case has stronger confirmed evidence\n"
                 "- Pick 'no_edge' ONLY if evidence is truly balanced with zero lean\n"
                 "- Lean toward picking a direction — markets rarely have zero bias\n"
+                "- Penalize arguments that recycle the same signal multiple times\n"
                 "- State the KEY ARGUMENT that decided it and the biggest WEAKNESS of the winner",
                 "user",
             ),

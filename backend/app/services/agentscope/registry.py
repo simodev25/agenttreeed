@@ -222,6 +222,8 @@ class AgentScopeRegistry:
         ohlc: dict[str, list[float]] = {}
         news: dict[str, Any] = {}
         market_source = "none"
+        account_id: str | None = None
+        region: str | None = None
 
         # ── Try MetaAPI first ──
         try:
@@ -331,7 +333,8 @@ class AgentScopeRegistry:
                 logger.warning("News context failed: %s", exc)
 
         snapshot["market_data_source"] = market_source
-        return {"snapshot": snapshot, "news": news, "ohlc": ohlc}
+        return {"snapshot": snapshot, "news": news, "ohlc": ohlc,
+                "account_id": account_id, "region": region}
 
     def _render_prompt(self, db, agent_name: str, variables: dict | None = None) -> dict[str, Any]:
         """Render prompt via PromptTemplateService (DB first, then DEFAULT_PROMPTS fallback).
@@ -530,7 +533,8 @@ class AgentScopeRegistry:
 
         return variables
 
-    def _build_context_msg(self, pair: str, timeframe: str, market_data: dict, db=None, variables: dict | None = None) -> Msg:
+    def _build_context_msg(self, pair: str, timeframe: str, market_data: dict, db=None, variables: dict | None = None,
+                           enrichment_blocks: list[str] | None = None) -> Msg:
         """Build context message. If DB prompts exist for agents, include rendered user_prompt."""
         snapshot = market_data.get("snapshot", {})
         ohlc = market_data.get("ohlc", {})
@@ -550,12 +554,18 @@ class AgentScopeRegistry:
             headlines = [f"- [{n.get('source', '?')}] {n.get('title', '')}" for n in news_items[:10]]
             news_section = f"\n\nNews ({len(news_items)} items):\n" + "\n".join(headlines)
 
+        # Enrichment blocks (multi-TF, run history, regime overlay)
+        enrichment_section = ""
+        if enrichment_blocks:
+            enrichment_section = "\n\n" + "\n\n".join(b for b in enrichment_blocks if b)
+
         content = (
             f"You are analyzing {pair} on the {timeframe} timeframe.\n\n"
             f"Market snapshot ({snapshot.get('market_data_source', 'unknown')}):\n"
             + "\n".join(market_lines) + "\n"
             f"- bars available: {len(ohlc.get('closes', []))}"
-            f"{news_section}\n\n"
+            f"{news_section}"
+            f"{enrichment_section}\n\n"
             f"IMPORTANT: Price data (closes, opens, highs, lows) is pre-loaded into your tools. "
             f"Call indicator_bundle(), pattern_detector(), divergence_detector(), "
             f"support_resistance_detector() directly — they already have the price arrays."
@@ -1119,11 +1129,17 @@ class AgentScopeRegistry:
             from app.services.agentscope.decision_helpers import compute_deterministic_score as _cds
             _det = _cds(analysis_outputs or {})
             _side = "BUY" if _det > 0 else ("SELL" if _det < 0 else "HOLD")
-            return {
+            _det_args: dict = {
                 "price": snapshot.get("last_price", 0.0),
                 "atr": snapshot.get("atr", 0.0),
                 "decision_side": _side,
             }
+            # Inject regime for adaptive SL/TP
+            _ctx_meta_det = (analysis_outputs or {}).get("market-context-analyst", {}).get("metadata", {})
+            _regime_det = _ctx_meta_det.get("regime", "")
+            if _regime_det:
+                _det_args["regime"] = _regime_det
+            return _det_args
         if tool_id == "position_size_calculator":
             td = (trader_out or {}).get("metadata", {})
             return {
@@ -1191,9 +1207,46 @@ class AgentScopeRegistry:
 
             # Resolve market data (MetaAPI primary, YFinance fallback)
             market_data = await self._resolve_market_data(db, pair, timeframe, metaapi_account_ref)
-            context_msg = self._build_context_msg(pair, timeframe, market_data)
             ohlc = market_data.get("ohlc", {})
             snapshot = market_data.get("snapshot", {})
+            _md_account_id = market_data.get("account_id")
+            _md_region = market_data.get("region")
+
+            # ── Context enrichment (Sprint 1) ──
+            # R1: Multi-TF Light — fetch higher/lower timeframe summaries
+            # R2: Mémoire Light — recent run history for this pair
+            _enrichment_blocks: list[str] = []
+            try:
+                from app.services.agentscope.context_enrichment import (
+                    fetch_multi_tf_context, format_multi_tf_block,
+                    fetch_recent_run_history, format_run_history_block,
+                )
+
+                # Multi-TF (async) — only if we have a MetaAPI account
+                _mtf_ctx = await fetch_multi_tf_context(
+                    pair=pair, current_tf=timeframe,
+                    account_id=_md_account_id, region=_md_region,
+                )
+                _mtf_block = format_multi_tf_block(_mtf_ctx)
+                if _mtf_block:
+                    _enrichment_blocks.append(_mtf_block)
+                    logger.info("Multi-TF context: higher=%s lower=%s",
+                                _mtf_ctx.get("higher_tf_name"), _mtf_ctx.get("lower_tf_name"))
+
+                # Run history (sync DB query)
+                _run_history = fetch_recent_run_history(db, pair, limit=7)
+                _history_block = format_run_history_block(_run_history)
+                if _history_block:
+                    _enrichment_blocks.append(_history_block)
+                    logger.info("Run history: %d recent runs for %s", len(_run_history), pair)
+
+            except Exception as _enrich_exc:
+                logger.warning("Context enrichment failed (non-fatal): %s", _enrich_exc)
+
+            context_msg = self._build_context_msg(
+                pair, timeframe, market_data,
+                enrichment_blocks=_enrichment_blocks if _enrichment_blocks else None,
+            )
 
             logger.info(
                 "Market data: pair=%s, tf=%s, bars=%d, source=%s, degraded=%s",
@@ -1235,6 +1288,10 @@ class AgentScopeRegistry:
             # Build prompt variables for context injection
             base_vars = self._build_prompt_variables(pair, timeframe, snapshot, market_data.get("news", {}))
             base_vars["decision_mode"] = _resolved_decision_mode
+            # Inject enrichment blocks into prompt variables
+            base_vars["multi_tf_block"] = _enrichment_blocks[0] if len(_enrichment_blocks) > 0 else ""
+            base_vars["history_block"] = _enrichment_blocks[1] if len(_enrichment_blocks) > 1 else ""
+            base_vars["regime_overlay"] = ""  # default, will be overridden per-agent when regime is known
             _mode_descriptions_early = {
                 "conservative": "CONSERVATIVE: Strict mode. Only trade when strong convergence exists. Require multiple confirming sources. Block marginal setups. If in doubt, HOLD.",
                 "balanced": "BALANCED: Intermediate mode. Trade when a reasonable edge exists. One confirming source with technical alignment is enough. Accept moderate uncertainty but block major contradictions.",
@@ -1384,6 +1441,22 @@ class AgentScopeRegistry:
             analysis_summary = "\n\n".join(
                 f"[{msg.name}]\n{msg.get_text_content()}" for msg in phase1_results
             )
+
+            # ── I1: Regime Overlay — extract regime from market-context-analyst ──
+            _detected_regime = ""
+            try:
+                _ctx_out = analysis_outputs.get("market-context-analyst", {})
+                _ctx_meta = _ctx_out.get("metadata", {})
+                _detected_regime = _ctx_meta.get("regime", "")
+                if _detected_regime:
+                    logger.info("Detected regime: %s — injecting overlays", _detected_regime)
+                    from app.services.agentscope.context_enrichment import get_regime_overlay
+                    # Store overlays in base_vars for prompt template injection
+                    base_vars["regime"] = _detected_regime
+                    base_vars["regime_overlay"] = ""  # default for agents without overlay
+            except Exception as _regime_exc:
+                logger.warning("Regime overlay extraction failed (non-fatal): %s", _regime_exc)
+
             research_msg = Msg("user",
                 f"Analysis results from Phase 1:\n{analysis_summary}\n\n"
                 f"Original context:\n{context_msg.get_text_content()}", "user")
@@ -1401,11 +1474,18 @@ class AgentScopeRegistry:
                     external_mcp_tools=model_selector.resolve_external_mcp_tools(db, rname),
                 )
                 if rname in agents:
+                    # Inject regime overlay into researcher system prompt
+                    _rname_vars = dict(base_vars)
+                    if _detected_regime:
+                        try:
+                            _rname_vars["regime_overlay"] = get_regime_overlay(_detected_regime, rname)
+                        except Exception:
+                            pass
                     agents[rname] = ALL_AGENT_FACTORIES[rname](
                         model=build_model(provider, agent_model_names[rname], base_url, api_key),
                         formatter=debate_fmt,
                         toolkit=toolkits[rname],
-                        sys_prompt=self._get_sys_prompt(rname, db, base_vars),
+                        sys_prompt=self._get_sys_prompt(rname, db, _rname_vars),
                     )
 
             # ── Phase 2+3: Researchers + Debate ──
@@ -1566,8 +1646,18 @@ class AgentScopeRegistry:
             for _phase4_name in ("trader-agent", "risk-manager", "execution-manager"):
                 _prompt_cache.pop(_phase4_name, None)
 
+            # I1: Build regime overlay block for Phase 4 context injection
+            _trader_regime_overlay = ""
+            if _detected_regime:
+                try:
+                    _trader_regime_overlay = get_regime_overlay(_detected_regime, "trader-agent")
+                except Exception:
+                    pass
+
+            _regime_section = f"\n{_trader_regime_overlay}\n" if _trader_regime_overlay else ""
             decision_context = (
-                f"Make a trading decision for {pair} on {timeframe}.\n\n"
+                f"Make a trading decision for {pair} on {timeframe}.\n"
+                f"{_regime_section}\n"
                 f"Debate result: {debate_result.winner} "
                 f"(conviction={debate_result.conviction}, "
                 f"key_argument={debate_result.key_argument}, "
@@ -1716,21 +1806,22 @@ class AgentScopeRegistry:
                         logger.info("Auto-calling trade_sizing for %s (trader didn't call it)", _trader_decision)
                         try:
                             from app.services.mcp.client import get_mcp_client
-                            _auto_sizing = await get_mcp_client().call_tool("trade_sizing", {
+                            # Extract regime from market-context-analyst for adaptive SL/TP
+                            _ctx_meta = analysis_outputs.get("market-context-analyst", {}).get("metadata", {})
+                            _regime = _ctx_meta.get("regime", "")
+                            _sizing_args = {
                                 "price": snapshot.get("last_price", 0.0),
                                 "atr": snapshot.get("atr", 0.0),
                                 "decision_side": _trader_decision,
                                 "decision_mode": _resolved_decision_mode,
-                            })
+                            }
+                            if _regime:
+                                _sizing_args["regime"] = _regime
+                            _auto_sizing = await get_mcp_client().call_tool("trade_sizing", _sizing_args)
                             if isinstance(_auto_sizing, dict) and "entry" in _auto_sizing:
                                 agent_tool_invocations.setdefault("trader-agent", {})["trade_sizing"] = {
                                     "tool_id": "trade_sizing", "status": "ok",
-                                    "input": {
-                                        "price": snapshot.get("last_price"),
-                                        "atr": snapshot.get("atr"),
-                                        "decision_side": _trader_decision,
-                                        "decision_mode": _resolved_decision_mode,
-                                    },
+                                    "input": _sizing_args,
                                     "data": _auto_sizing,
                                 }
                                 logger.info("Auto trade_sizing: entry=%s SL=%s TP=%s",

@@ -125,6 +125,43 @@ def _best_current_fit_requested(prompt: str) -> bool:
     return any(pattern in prompt for pattern in _BEST_FIT_PATTERNS)
 
 
+# ── Regime-fit scoring for "best current fit" ranking ──
+_FIT_SCORES: dict[str, int] = {'strong': 4, 'good': 3, 'watch': 1, 'poor': 0, 'unknown': 2}
+
+
+def rank_templates_by_regime_fit(
+    market_regime: str | None,
+    available_templates: set[str] | None = None,
+) -> list[tuple[str, str, int]]:
+    """Return templates ranked by fit for the given regime.
+
+    Returns list of (template_name, fit_label, score) sorted descending.
+    """
+    templates = available_templates or set(EXECUTABLE_STRATEGY_TEMPLATES.keys())
+    regime_key = _normalize_text(market_regime or '')
+    regime_fits = _MARKET_FIT_MATRIX.get(regime_key, {})
+
+    scored: list[tuple[str, str, int]] = []
+    for tpl_name in sorted(templates):
+        spec = EXECUTABLE_STRATEGY_TEMPLATES.get(tpl_name)
+        if spec is None:
+            continue
+        fit = regime_fits.get(spec.category, 'unknown')
+        scored.append((tpl_name, fit, _FIT_SCORES.get(fit, 2)))
+
+    scored.sort(key=lambda x: (-x[2], x[0]))
+    return scored
+
+
+def best_template_for_regime(
+    market_regime: str | None,
+    available_templates: set[str] | None = None,
+) -> str | None:
+    """Return the single best template for the given market regime."""
+    ranked = rank_templates_by_regime_fit(market_regime, available_templates)
+    return ranked[0][0] if ranked else None
+
+
 def _category_templates(category: str, available_templates: set[str]) -> list[str]:
     return [
         template
@@ -238,6 +275,20 @@ def apply_template_selection_policy(
         else:
             match_basis = 'model_recommendation'
             request_fidelity = 'inferred'
+
+    # 3b) Best-current-fit: override model recommendation with regime-ranked template
+    if best_fit_requested and market_regime and selected_template:
+        best_regime_template = best_template_for_regime(market_regime, available_set)
+        if best_regime_template and best_regime_template != selected_template:
+            current_fit = _compute_market_fit(selected_template, market_regime)
+            best_fit = _compute_market_fit(best_regime_template, market_regime)
+            if _FIT_SCORES.get(best_fit, 0) > _FIT_SCORES.get(current_fit, 0):
+                warnings.append(
+                    f'Best-fit override: "{best_regime_template}" ({best_fit}) replaces '
+                    f'"{selected_template}" ({current_fit}) for regime "{market_regime}".'
+                )
+                selected_template = best_regime_template
+                match_basis = 'best_current_fit_regime_ranked'
 
     if selected_template is None and not custom_strategy_required:
         selected_template = sorted(available_set)[0] if available_set else None
