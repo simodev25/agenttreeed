@@ -169,6 +169,10 @@
     "socraticode": {
       "type": "local",
       "command": ["npx", "-y", "socraticode"],
+      "environment": {
+        "SOCRATICODE_BRANCH_AWARE": "true",
+        "INCLUDE_DOT_FILES": "false"
+      },
       "enabled": true
     }
   },
