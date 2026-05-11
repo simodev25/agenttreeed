@@ -20,6 +20,14 @@ export interface BenchmarkFixture {
   updated_at: string;
 }
 
+export interface BenchmarkCreateFixturePayload {
+  name: string;
+  agent_name: string;
+  inputs: Record<string, unknown>;
+  config: Record<string, unknown>;
+  default_scoring_weights?: Record<string, number> | null;
+}
+
 export interface BenchmarkRun {
   id: number;
   fixture_id: number;

@@ -1,4 +1,5 @@
 import type {
+  BenchmarkCreateFixturePayload,
   BenchmarkCreateRunPayload,
   BenchmarkFixture,
   BenchmarkRun,
@@ -252,6 +253,11 @@ export const api = {
   // Benchmark (GH-26)
   listBenchmarkFixtures: (token: string) =>
     request<BenchmarkFixture[]>('/benchmark/fixtures', {}, token),
+  createBenchmarkFixture: (token: string, payload: BenchmarkCreateFixturePayload) =>
+    request<BenchmarkFixture>('/benchmark/fixtures', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, token),
   getBenchmarkFixture: (token: string, fixtureId: number) =>
     request<BenchmarkFixture>(`/benchmark/fixtures/${fixtureId}`, {}, token),
   listBenchmarkRuns: (token: string, params: { fixture_id?: number; status?: string } = {}) => {

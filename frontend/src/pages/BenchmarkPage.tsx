@@ -1,6 +1,7 @@
 import { FlaskConical } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { FixturesTable } from './benchmark/FixturesTable';
+import { CreateFixturePanel } from './benchmark/CreateFixturePanel';
 import { RunConfigurationPanel } from './benchmark/RunConfigurationPanel';
 import { RunsTable } from './benchmark/RunsTable';
 import { ComparisonTable, ResultsTable } from './benchmark/ResultsTables';
@@ -26,13 +27,42 @@ export function BenchmarkPage() {
           <span className="text-[11px] font-bold tracking-[0.12em] text-accent uppercase">FIXTURES</span>
         </div>
         <div className="p-5">
-          <FixturesTable
-            fixtures={state.fixtures}
-            selectedFixtureId={state.selectedFixtureId}
-            loading={state.fixturesLoading}
-            error={state.fixturesError}
-            onSelectFixture={state.handleSelectFixture}
+          <CreateFixturePanel
+            open={state.showCreateFixtureForm}
+            fixtureName={state.fixtureName}
+            fixtureAgentName={state.fixtureAgentName}
+            fixtureInputsText={state.fixtureInputsText}
+            fixtureConfigText={state.fixtureConfigText}
+            createFixtureSubmitting={state.createFixtureSubmitting}
+            createFixtureError={state.createFixtureError}
+            fixtureInputsError={state.fixtureInputsError}
+            fixtureConfigError={state.fixtureConfigError}
+            onToggleOpen={() => {
+              if (state.showCreateFixtureForm) {
+                state.handleCancelCreateFixture();
+              } else {
+                state.setShowCreateFixtureForm(true);
+              }
+            }}
+            onNameChange={state.setFixtureName}
+            onAgentChange={state.setFixtureAgentName}
+            onInputsChange={state.setFixtureInputsText}
+            onConfigChange={state.setFixtureConfigText}
+            onCreate={() => {
+              void state.handleCreateFixture();
+            }}
+            onCancel={state.handleCancelCreateFixture}
           />
+
+          <div className="mt-4">
+            <FixturesTable
+              fixtures={state.fixtures}
+              selectedFixtureId={state.selectedFixtureId}
+              loading={state.fixturesLoading}
+              error={state.fixturesError}
+              onSelectFixture={state.handleSelectFixture}
+            />
+          </div>
         </div>
       </div>
 

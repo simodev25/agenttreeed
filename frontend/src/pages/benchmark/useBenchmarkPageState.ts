@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import type {
+  BenchmarkCreateFixturePayload,
   BenchmarkCreateRunPayload,
   BenchmarkFixture,
   BenchmarkRun,
@@ -47,6 +48,16 @@ export function useBenchmarkPageState(token: string | null) {
   const [comparisonIds, setComparisonIds] = useState<number[]>([]);
   const [comparisonOpen, setComparisonOpen] = useState(false);
   const [comparisonDetailsById, setComparisonDetailsById] = useState<Record<number, BenchmarkRunDetail>>({});
+
+  const [showCreateFixtureForm, setShowCreateFixtureForm] = useState(false);
+  const [fixtureName, setFixtureName] = useState('');
+  const [fixtureAgentName, setFixtureAgentName] = useState('technical-analyst');
+  const [fixtureInputsText, setFixtureInputsText] = useState('{\n  "pair": "EURUSD",\n  "timeframe": "H1"\n}');
+  const [fixtureConfigText, setFixtureConfigText] = useState('{}');
+  const [createFixtureSubmitting, setCreateFixtureSubmitting] = useState(false);
+  const [createFixtureError, setCreateFixtureError] = useState<string | null>(null);
+  const [fixtureInputsError, setFixtureInputsError] = useState<string | null>(null);
+  const [fixtureConfigError, setFixtureConfigError] = useState<string | null>(null);
 
   const selectedFixture = useMemo(
     () => fixtures.find((fixture) => fixture.id === selectedFixtureId) ?? null,
@@ -230,6 +241,87 @@ export function useBenchmarkPageState(token: string | null) {
     }
   };
 
+  const parseJsonObject = (value: string, fieldLabel: string): Record<string, unknown> => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      throw new Error(`${fieldLabel} doit être un JSON valide.`);
+    }
+
+    if (parsed === null || Array.isArray(parsed) || typeof parsed !== 'object') {
+      throw new Error(`${fieldLabel} doit être un objet JSON.`);
+    }
+
+    return parsed as Record<string, unknown>;
+  };
+
+  const resetCreateFixtureForm = () => {
+    setFixtureName('');
+    setFixtureAgentName('technical-analyst');
+    setFixtureInputsText('{\n  "pair": "EURUSD",\n  "timeframe": "H1"\n}');
+    setFixtureConfigText('{}');
+    setCreateFixtureError(null);
+    setFixtureInputsError(null);
+    setFixtureConfigError(null);
+  };
+
+  const handleCancelCreateFixture = () => {
+    setShowCreateFixtureForm(false);
+    resetCreateFixtureForm();
+  };
+
+  const handleCreateFixture = async () => {
+    if (!token || createFixtureSubmitting) return;
+
+    const name = fixtureName.trim();
+    if (!name) {
+      setCreateFixtureError('Le nom de la fixture est requis.');
+      return;
+    }
+
+    setCreateFixtureError(null);
+    setFixtureInputsError(null);
+    setFixtureConfigError(null);
+
+    let inputs: Record<string, unknown>;
+    let config: Record<string, unknown>;
+
+    try {
+      inputs = parseJsonObject(fixtureInputsText, 'Inputs');
+    } catch (error) {
+      setFixtureInputsError(error instanceof Error ? error.message : 'Inputs doit être un JSON valide.');
+      return;
+    }
+
+    try {
+      config = parseJsonObject(fixtureConfigText, 'Config');
+    } catch (error) {
+      setFixtureConfigError(error instanceof Error ? error.message : 'Config doit être un JSON valide.');
+      return;
+    }
+
+    const payload: BenchmarkCreateFixturePayload = {
+      name,
+      agent_name: fixtureAgentName,
+      inputs,
+      config,
+    };
+
+    setCreateFixtureSubmitting(true);
+    try {
+      const createdFixture = await api.createBenchmarkFixture(token, payload);
+      await loadFixtures();
+      handleSelectFixture(createdFixture.id);
+      setShowCreateFixtureForm(false);
+      resetCreateFixtureForm();
+    } catch (error) {
+      setCreateFixtureError(error instanceof Error ? error.message : 'Impossible de créer la fixture');
+    } finally {
+      setCreateFixtureSubmitting(false);
+    }
+  };
+
   return {
     fixtures,
     fixturesLoading,
@@ -254,6 +346,15 @@ export function useBenchmarkPageState(token: string | null) {
     comparisonIds,
     comparisonOpen,
     comparisonDetailsById,
+    showCreateFixtureForm,
+    fixtureName,
+    fixtureAgentName,
+    fixtureInputsText,
+    fixtureConfigText,
+    createFixtureSubmitting,
+    createFixtureError,
+    fixtureInputsError,
+    fixtureConfigError,
     setSelectedFixtureId,
     setSelectedRunId,
     setComparisonIds,
@@ -261,9 +362,16 @@ export function useBenchmarkPageState(token: string | null) {
     setModelSpecs,
     setRepeatCount,
     setTagsInput,
+    setShowCreateFixtureForm,
+    setFixtureName,
+    setFixtureAgentName,
+    setFixtureInputsText,
+    setFixtureConfigText,
     handleModelSpecChange,
     handleSubmitRun,
     handleSelectFixture,
+    handleCreateFixture,
+    handleCancelCreateFixture,
     toggleCompare,
   };
 }

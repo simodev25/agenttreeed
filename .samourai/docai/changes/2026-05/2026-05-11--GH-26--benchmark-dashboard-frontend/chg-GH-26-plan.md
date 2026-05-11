@@ -58,7 +58,7 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 
 - Toute modification backend (GH-24) ou du contrat API (Non-objectifs, 7.2).
 - Charts avancés (radar/heatmap), scoring V2, export, tests E2E Playwright.
-- Création de fixture via UI.
+- Création de fixture via UI (phase initiale) — remplacé par une phase de remédiation dédiée (Phase 13).
 
 ### Constraints
 
@@ -416,6 +416,39 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 
 **Completion signal**: `fix(GH-26): address code review iteration 1 remediation`
 
+---
+
+### Phase 13: Fixture Creation Form (Frontend)
+
+**Goal**: Ajouter la création de fixture directement depuis `/benchmark` pour débloquer l'usage du dashboard sans fixtures préexistantes.
+
+**Tasks**:
+
+- [x] **13.1** Ajouter/valider le contrat frontend de création fixture (`BenchmarkCreateFixturePayload` + méthode API `createBenchmarkFixture`) en mode additif. *(<=2h)* (type + méthode API présents dans `frontend/src/types/benchmark.ts` et `frontend/src/api/client.ts`)
+- [x] **13.2** Implémenter un formulaire UI `+ NOUVELLE FIXTURE` (inline) avec champs `name`, `agent_name`, `inputs` JSON, `config` JSON en respectant le design system terminal (`hw-surface`, `micro-label`, `btn-*`). *(<=2h)* (`CreateFixturePanel.tsx` ajouté et branché dans `BenchmarkPage.tsx`)
+- [x] **13.3** Implémenter la validation JSON côté UI + soumission `POST /benchmark/fixtures` + refresh des fixtures + sélection de la fixture créée. *(<=2h)* (logique `handleCreateFixture` + erreurs `fixtureInputsError/fixtureConfigError` + `loadFixtures` + `handleSelectFixture`)
+- [x] **13.4** Exécuter la validation frontend (`cd frontend && npm run build`) et documenter le résultat. *(<=2h)* (build exécuté via runner, échec sur erreurs TS préexistantes hors périmètre GH-26 ; log `.samourai/tmpai/run-logs-runner/2026-05-11/205525-frontend-build.log`)
+
+**Acceptance Criteria**:
+
+- Criterion: Le bouton `NOUVELLE FIXTURE` est visible dans la section FIXTURES et ouvre/ferme le formulaire — PASSED (`CreateFixturePanel` branché dans `BenchmarkPage.tsx`).
+- Criterion: Le formulaire valide `inputs`/`config` comme JSON objet avant soumission — PASSED (`parseJsonObject` + erreurs dédiées dans `useBenchmarkPageState.ts`).
+- Criterion: La soumission appelle `POST /benchmark/fixtures`, rafraîchit la liste et sélectionne la fixture créée — PASSED (`api.createBenchmarkFixture` + `loadFixtures` + `handleSelectFixture(createdFixture.id)`).
+
+**Files and modules**:
+
+- `frontend/src/pages/BenchmarkPage.tsx`
+- `frontend/src/pages/benchmark/CreateFixturePanel.tsx`
+- `frontend/src/pages/benchmark/useBenchmarkPageState.ts`
+- `frontend/src/api/client.ts`
+- `frontend/src/types/benchmark.ts`
+
+**Tests**:
+
+- `cd frontend && npm run build`
+
+**Completion signal**: `feat(GH-26): add benchmark fixture creation form`
+
 ## Test Scenarios
 
 | ID | Scénario | Phases | AC |
@@ -448,6 +481,7 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 |---------|------|--------|---------|
 | 1.0 | 2026-05-11 | plan-writer | Plan initial (phases 1–11) aligné sur la spec GH-26 |
 | 1.1 | 2026-05-11 | reviewer | Ajout Phase 12 « Code Review Remediation (Iteration 1) » suite à review locale (écarts AC/robustesse API/plan audit). |
+| 1.2 | 2026-05-11 | coder | Ajout Phase 13 « Fixture Creation Form (Frontend) » pour couvrir la création de fixture via UI + validation JSON + POST/refresh. |
 
 ## Execution Log
 
@@ -461,3 +495,4 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 | Phase 6 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Vue comparaison multi-modèles (`ComparisonTable`) avec meilleur score mis en évidence et retour. |
 | Phase 7 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Détail run (`ExpansionPanel`) branché dans la page avec cases/attempts, scores et raw output texte brut. |
 | Phase 12 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Remédiations review itération 1 appliquées: comparaison branchée, robustesse runs, fallback `/results` explicite, détail run complété. |
+| Phase 13 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Formulaire de création fixture ajouté dans `/benchmark` avec validation JSON objet, POST `/benchmark/fixtures`, refresh fixtures et sélection de la fixture créée. Build frontend relancé (échec sur dette TS hors scope GH-26 ; log runner `205525-frontend-build.log`). |
