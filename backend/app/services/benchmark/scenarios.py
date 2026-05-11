@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,16 +22,61 @@ class ScenarioExecutionResult:
     attempts: list[ScenarioAttemptResult]
 
 
+def _try_extract_json(text: str) -> dict[str, Any]:
+    """Try to extract a JSON object from text content."""
+    if not text:
+        return {}
+    clean = text.strip()
+    # Direct parse
+    try:
+        parsed = json.loads(clean)
+        if isinstance(parsed, dict):
+            return parsed
+    except (json.JSONDecodeError, ValueError):
+        pass
+    # Find JSON block in text
+    start = clean.find("{")
+    if start >= 0:
+        end = clean.rfind("}")
+        if end > start:
+            try:
+                parsed = json.loads(clean[start:end + 1])
+                if isinstance(parsed, dict):
+                    return parsed
+            except (json.JSONDecodeError, ValueError):
+                pass
+    return {}
+
+
 def _extract_output_payload(msg: Any) -> dict[str, Any]:
+    """Extract structured output from an AgentScope Msg.
+
+    Mirrors the extraction logic used by the real pipeline (_msg_to_dict):
+    1. Check msg.metadata (structured dict set by ReActAgent)
+    2. If empty, parse JSON from text content
+    3. Fallback to {'text': ...}
+    """
     if msg is None:
         return {}
+    # 1. Check metadata (AgentScope agents put structured output here)
     metadata = getattr(msg, 'metadata', None)
-    if isinstance(metadata, dict):
+    if isinstance(metadata, dict) and metadata:
         return metadata
+    # 2. Try to get text content and parse JSON from it
+    text = ''
+    try:
+        text = msg.get_text_content() or ''
+    except Exception:
+        text = str(getattr(msg, 'content', ''))
+    if text:
+        parsed = _try_extract_json(text)
+        if parsed:
+            return parsed
+    # 3. Try content as dict directly
     content = getattr(msg, 'content', None)
-    if isinstance(content, dict):
+    if isinstance(content, dict) and content:
         return content
-    return {'text': str(getattr(msg, 'text', ''))}
+    return {'text': text}
 
 
 async def run_single_agent_scenario(
