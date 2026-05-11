@@ -481,6 +481,38 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 
 **Completion signal**: `feat(GH-26): add realistic fixture input presets per agent`
 
+---
+
+### Phase 15: Backend endpoint `/benchmark/runs/{id}/results`
+
+**Goal**: Ajouter l'endpoint backend manquant pour fournir les résultats agrégés attendus par le frontend GH-26.
+
+**Tasks**:
+
+- [x] **15.1** Ajouter les schémas Pydantic de sortie `BenchmarkScoresV1Out`, `BenchmarkAgentResultsOut`, `BenchmarkRunResultsOut` dans `backend/app/schemas/benchmark.py` alignés avec la structure attendue (`overall_scores`, `agent_results`, `total_attempts`). *(<=2h)* (schémas ajoutés dans `backend/app/schemas/benchmark.py`)
+- [x] **15.2** Implémenter `get_run_results(db, run_id)` dans `backend/app/services/benchmark/runs_service.py` avec agrégations SQLAlchemy (global + par agent) sur `BenchmarkCase/BenchmarkAttempt`, fallback à `0.0` sans attempts. *(<=2h)* (service `get_run_results` + helper `_scores_from_row` ajoutés)
+- [x] **15.3** Ajouter la route `GET /benchmark/runs/{run_id}/results` dans `backend/app/api/routes/benchmark.py` avec rôles `SUPER_ADMIN`, `ADMIN`, `ANALYST` et `response_model=BenchmarkRunResultsOut`. *(<=2h)* (route ajoutée dans `benchmark.py`)
+- [x] **15.4** Ajouter des tests unitaires backend couvrant agrégation multi-agents et cas sans attempts, puis exécuter la suite ciblée. *(<=2h)* (tests ajoutés dans `backend/tests/unit/test_benchmark_api_and_services_phase5.py`, commande `.venv/bin/python -m pytest -q tests/unit/test_benchmark_api_and_services_phase5.py` = PASS)
+
+**Acceptance Criteria**:
+
+- Criterion: `GET /benchmark/runs/{id}/results` existe et est protégé par les rôles `SUPER_ADMIN`, `ADMIN`, `ANALYST` — PASSED (`backend/app/api/routes/benchmark.py`, route `@router.get('/runs/{run_id}/results')`).
+- Criterion: La réponse expose `run_id`, `fixture_id`, `model_spec`, `scenario_type`, `status`, `overall_scores`, `agent_results`, `total_attempts` — PASSED (`BenchmarkRunResultsOut` dans `backend/app/schemas/benchmark.py`).
+- Criterion: Les moyennes V1 par agent et globales sont calculées depuis `benchmark_attempts` avec comportement stable quand aucune tentative n'existe — PASSED (`get_run_results` + tests unitaires PASS).
+
+**Files and modules**:
+
+- `backend/app/schemas/benchmark.py`
+- `backend/app/services/benchmark/runs_service.py`
+- `backend/app/api/routes/benchmark.py`
+- `backend/tests/unit/test_benchmark_api_and_services_phase5.py`
+
+**Tests**:
+
+- `cd backend && .venv/bin/python -m pytest -q tests/unit/test_benchmark_api_and_services_phase5.py`
+
+**Completion signal**: `feat(GH-26): add benchmark run results endpoint`
+
 ## Test Scenarios
 
 | ID | Scénario | Phases | AC |
@@ -515,6 +547,7 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 | 1.1 | 2026-05-11 | reviewer | Ajout Phase 12 « Code Review Remediation (Iteration 1) » suite à review locale (écarts AC/robustesse API/plan audit). |
 | 1.2 | 2026-05-11 | coder | Ajout Phase 13 « Fixture Creation Form (Frontend) » pour couvrir la création de fixture via UI + validation JSON + POST/refresh. |
 | 1.3 | 2026-05-11 | coder | Ajout Phase 14 « Fixture Inputs Presets & Agent Templates » pour préremplissage réaliste des inputs (agent + preset marché) et config défaut LLM. |
+| 1.4 | 2026-05-11 | coder | Ajout Phase 15 « Backend endpoint /benchmark/runs/{id}/results » pour livrer le contrat backend attendu par le dashboard frontend GH-26. |
 
 ## Execution Log
 
@@ -530,3 +563,4 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 | Phase 12 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Remédiations review itération 1 appliquées: comparaison branchée, robustesse runs, fallback `/results` explicite, détail run complété. |
 | Phase 13 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Formulaire de création fixture ajouté dans `/benchmark` avec validation JSON objet, POST `/benchmark/fixtures`, refresh fixtures et sélection de la fixture créée. Build frontend relancé (échec sur dette TS hors scope GH-26 ; log runner `205525-frontend-build.log`). |
 | Phase 14 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Presets marché + templates agent ajoutés pour pré-remplir `Inputs (JSON)` (EURUSD H1/BTCUSD H4/GBPJPY M15, OHLC réalistes 50+). Dropdown preset ajouté et config défaut `{"llm_enabled": true}`. Build relancé (échec hors scope GH-26 ; log runner `212154-npm-run-build.log`). |
+| Phase 15 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Endpoint backend `GET /benchmark/runs/{id}/results` ajouté avec schémas de sortie, service d'agrégation SQLAlchemy (global + par agent), tests unitaires ciblés PASS (`cd backend && .venv/bin/python -m pytest -q tests/unit/test_benchmark_api_and_services_phase5.py`). |
