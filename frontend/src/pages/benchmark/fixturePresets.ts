@@ -257,6 +257,113 @@ function buildSnapshot(preset: MarketPresetDefinition, ohlc: OhlcSeries): Record
   };
 }
 
+function getSpecializedAgentInputs(agentName: BenchmarkAgentName): Record<string, unknown> {
+  switch (agentName) {
+    case 'news-analyst':
+      return {
+        news_context: {
+          articles: [
+            {
+              title: 'ECB holds rates steady at 4.25%',
+              sentiment: 'neutral',
+              impact: 'high',
+              source: 'Reuters',
+              published: '2026-05-11T10:00:00Z',
+            },
+            {
+              title: 'US Non-Farm Payrolls beat expectations at 256K',
+              sentiment: 'bullish_usd',
+              impact: 'high',
+              source: 'Bloomberg',
+              published: '2026-05-11T08:30:00Z',
+            },
+            {
+              title: 'EURUSD technical outlook remains bearish below 1.0900',
+              sentiment: 'bearish',
+              impact: 'medium',
+              source: 'FXStreet',
+              published: '2026-05-11T07:00:00Z',
+            },
+          ],
+          macro_calendar: [
+            {
+              event: 'ECB Rate Decision',
+              actual: '4.25%',
+              forecast: '4.25%',
+              previous: '4.25%',
+              impact: 'high',
+            },
+            {
+              event: 'US Non-Farm Payrolls',
+              actual: '256K',
+              forecast: '185K',
+              previous: '216K',
+              impact: 'high',
+            },
+          ],
+        },
+      };
+    case 'risk-manager':
+      return {
+        portfolio_state: {
+          open_positions: [
+            {
+              symbol: 'EURUSD',
+              side: 'BUY',
+              size: 0.1,
+              entry_price: 1.082,
+              current_price: 1.0835,
+              unrealized_pnl_usd: 15.0,
+            },
+            {
+              symbol: 'GBPJPY',
+              side: 'SELL',
+              size: 0.05,
+              entry_price: 192.45,
+              current_price: 192.1,
+              unrealized_pnl_usd: 23.3,
+            },
+          ],
+          total_exposure_pct: 2.5,
+          daily_drawdown_pct: -0.3,
+          max_allowed_risk_pct: 1.0,
+          account_balance_usd: 10000,
+        },
+      };
+    case 'execution-manager':
+      return {
+        execution_context: {
+          spread_pips: 1.2,
+          avg_spread_24h_pips: 1.5,
+          liquidity: 'high',
+          active_session: 'london_newyork_overlap',
+          slippage_estimate_pips: 0.3,
+          market_impact: 'low',
+        },
+      };
+    case 'bullish-researcher':
+    case 'bearish-researcher':
+      return {
+        phase1_results: {
+          technical_summary: 'Bullish structural bias with EMA alignment. RSI at 55, not overbought. MACD positive crossover.',
+          news_summary: 'Mixed macro environment. ECB on hold, USD strengthened on NFP beat.',
+          market_context_summary: 'Trending regime, London-NY overlap, high liquidity.',
+        },
+      };
+    case 'trader-agent':
+      return {
+        debate_results: {
+          bullish_thesis: 'Strong technical setup with EMA alignment and MACD crossover. NFP data supports short-term USD weakness against EUR.',
+          bearish_thesis: 'ECB hold signals no further easing, limiting EUR upside. Key resistance at 1.0900 not broken.',
+          bullish_confidence: 0.65,
+          bearish_confidence: 0.55,
+        },
+      };
+    default:
+      return {};
+  }
+}
+
 export function buildFixtureInputs(agentName: BenchmarkAgentName, presetId: FixturePresetId): Record<string, unknown> {
   const preset = PRESET_DEFINITIONS.find((item) => item.id === presetId) ?? PRESET_DEFINITIONS[0];
   const ohlc = buildOhlcSeries(preset);
@@ -280,6 +387,7 @@ export function buildFixtureInputs(agentName: BenchmarkAgentName, presetId: Fixt
     context: `Analysis context:\n${JSON.stringify(contextPayload, null, 2)}`,
     ohlc,
     snapshot,
+    ...getSpecializedAgentInputs(agentName),
   };
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
 import type {
   BenchmarkCreateFixturePayload,
@@ -31,7 +31,7 @@ function toScenarioType(value: unknown): ScenarioType {
   return 'single-agent';
 }
 
-export function useBenchmarkPageState(token: string | null) {
+export function useBenchmarkPageState(token: string | null, userRole: string | null) {
   const [fixtures, setFixtures] = useState<BenchmarkFixture[]>([]);
   const [fixturesLoading, setFixturesLoading] = useState(false);
   const [fixturesError, setFixturesError] = useState<string | null>(null);
@@ -80,6 +80,35 @@ export function useBenchmarkPageState(token: string | null) {
     [runs, selectedRunId],
   );
 
+  const canManage = useMemo(() => {
+    const normalizedRole = userRole?.toLowerCase() ?? '';
+    return normalizedRole === 'admin' || normalizedRole === 'super_admin';
+  }, [userRole]);
+
+  const loadRuns = useCallback(
+    async (fixtureId: number | null) => {
+      if (!fixtureId) {
+        setRuns([]);
+        setRunsError(null);
+        return;
+      }
+      if (!token) return;
+
+      setRunsLoading(true);
+      setRunsError(null);
+      try {
+        const data = await api.listBenchmarkRuns(token, { fixture_id: fixtureId });
+        setRuns(data);
+      } catch (error) {
+        setRuns([]);
+        setRunsError(error instanceof Error ? error.message : 'Impossible de charger les runs');
+      } finally {
+        setRunsLoading(false);
+      }
+    },
+    [token],
+  );
+
   const loadFixtures = async () => {
     if (!token) return;
     setFixturesLoading(true);
@@ -103,29 +132,21 @@ export function useBenchmarkPageState(token: string | null) {
   }, [token]);
 
   useEffect(() => {
-    if (!selectedFixtureId) {
-      setRuns([]);
-      setRunsError(null);
-      return;
-    }
+    void loadRuns(selectedFixtureId);
+  }, [selectedFixtureId, loadRuns]);
 
-    const loadRuns = async () => {
-      if (!token) return;
-      setRunsLoading(true);
-      setRunsError(null);
-      try {
-        const data = await api.listBenchmarkRuns(token, { fixture_id: selectedFixtureId });
-        setRuns(data);
-      } catch (error) {
-        setRuns([]);
-        setRunsError(error instanceof Error ? error.message : 'Impossible de charger les runs');
-      } finally {
-        setRunsLoading(false);
-      }
+  useEffect(() => {
+    const hasActiveRuns = runs.some((run) => run.status === 'PENDING' || run.status === 'RUNNING');
+    if (!selectedFixtureId || !hasActiveRuns) return;
+
+    const intervalId = window.setInterval(() => {
+      void loadRuns(selectedFixtureId);
+    }, 5000);
+
+    return () => {
+      window.clearInterval(intervalId);
     };
-
-    void loadRuns();
-  }, [token, selectedFixtureId]);
+  }, [runs, selectedFixtureId, loadRuns]);
 
   useEffect(() => {
     if (!selectedRunId) {
@@ -192,7 +213,7 @@ export function useBenchmarkPageState(token: string | null) {
   };
 
   const handleSubmitRun = async () => {
-    if (!token || !selectedFixture) return;
+    if (!canManage || !token || !selectedFixture) return;
 
     const validSpecs = modelSpecs.filter(
       (spec) => spec.provider.trim().length > 0 && spec.model_name.trim().length > 0,
@@ -218,8 +239,7 @@ export function useBenchmarkPageState(token: string | null) {
         await api.createBenchmarkRun(token, payload);
       }
 
-      const refreshedRuns = await api.listBenchmarkRuns(token, { fixture_id: selectedFixture.id });
-      setRuns(refreshedRuns);
+      await loadRuns(selectedFixture.id);
       // TODO(GH-26/OQ-3): tags préparés côté UI, endpoint backend actuel ne supporte pas encore le champ.
       void tagsInput;
     } catch (error) {
@@ -304,7 +324,7 @@ export function useBenchmarkPageState(token: string | null) {
   };
 
   const handleCreateFixture = async () => {
-    if (!token || createFixtureSubmitting) return;
+    if (!canManage || !token || createFixtureSubmitting) return;
 
     const name = fixtureName.trim();
     if (!name) {
@@ -388,6 +408,7 @@ export function useBenchmarkPageState(token: string | null) {
     createFixtureError,
     fixtureInputsError,
     fixtureConfigError,
+    canManage,
     setSelectedFixtureId,
     setSelectedRunId,
     setComparisonIds,
@@ -409,5 +430,6 @@ export function useBenchmarkPageState(token: string | null) {
     handleCreateFixture,
     handleCancelCreateFixture,
     toggleCompare,
+    loadRuns,
   };
 }

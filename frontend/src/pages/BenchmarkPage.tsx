@@ -9,8 +9,8 @@ import { RunDetailPanel } from './benchmark/RunDetailPanel';
 import { useBenchmarkPageState } from './benchmark/useBenchmarkPageState';
 
 export function BenchmarkPage() {
-  const { token } = useAuth();
-  const state = useBenchmarkPageState(token);
+  const { token, user } = useAuth();
+  const state = useBenchmarkPageState(token, user?.role ?? null);
 
   return (
     <div className="flex flex-col gap-5">
@@ -54,7 +54,12 @@ export function BenchmarkPage() {
               void state.handleCreateFixture();
             }}
             onCancel={state.handleCancelCreateFixture}
+            canManage={state.canManage}
           />
+
+          {!state.canManage ? (
+            <p className="mt-3 text-[11px] text-text-dim">Lecture seule — rôle admin requis pour créer</p>
+          ) : null}
 
           <div className="mt-4">
             <FixturesTable
@@ -68,36 +73,45 @@ export function BenchmarkPage() {
         </div>
       </div>
 
-      <RunConfigurationPanel
-        fixtures={state.fixtures}
-        selectedFixtureId={state.selectedFixtureId}
-        modelSpecs={state.modelSpecs}
-        repeatCount={state.repeatCount}
-        tagsInput={state.tagsInput}
-        submittingRun={state.submittingRun}
-        submitError={state.submitError}
-        runs={state.runs}
-        onFixtureChange={(fixtureId) => {
-          state.setSelectedFixtureId(fixtureId);
-        }}
-        onModelSpecChange={state.handleModelSpecChange}
-        onAddModelSpec={() =>
-          state.setModelSpecs((prev) => [
-            ...prev,
-            { provider: 'openai', model_name: 'gpt-4o-mini', parameters: { temperature: 0 } },
-          ])
-        }
-        onRemoveModelSpec={(index) => state.setModelSpecs((prev) => prev.filter((_, idx) => idx !== index))}
-        onRepeatCountChange={state.setRepeatCount}
-        onTagsChange={state.setTagsInput}
-        onSubmit={state.handleSubmitRun}
-      />
+      {state.canManage ? (
+        <RunConfigurationPanel
+          fixtures={state.fixtures}
+          selectedFixtureId={state.selectedFixtureId}
+          modelSpecs={state.modelSpecs}
+          repeatCount={state.repeatCount}
+          tagsInput={state.tagsInput}
+          submittingRun={state.submittingRun}
+          submitError={state.submitError}
+          runs={state.runs}
+          onFixtureChange={(fixtureId) => {
+            state.setSelectedFixtureId(fixtureId);
+          }}
+          onModelSpecChange={state.handleModelSpecChange}
+          onAddModelSpec={() =>
+            state.setModelSpecs((prev) => [
+              ...prev,
+              { provider: 'openai', model_name: 'gpt-4o-mini', parameters: { temperature: 0 } },
+            ])
+          }
+          onRemoveModelSpec={(index) => state.setModelSpecs((prev) => prev.filter((_, idx) => idx !== index))}
+          onRepeatCountChange={state.setRepeatCount}
+          onTagsChange={state.setTagsInput}
+          onSubmit={state.handleSubmitRun}
+        />
+      ) : (
+        <div className="hw-surface p-5">
+          <p className="text-[11px] text-text-dim">Lecture seule — rôle admin requis pour créer</p>
+        </div>
+      )}
 
       <RunsTable
         runs={state.runs}
         loading={state.runsLoading}
         selectedRunId={state.selectedRunId}
         comparisonIds={state.comparisonIds}
+        onRefreshRuns={() => {
+          void state.loadRuns(state.selectedFixtureId);
+        }}
         onSelectRun={state.setSelectedRunId}
         onToggleCompare={(runId) => {
           void state.toggleCompare(runId);

@@ -7,6 +7,7 @@ import {
 } from './fixturePresets';
 
 interface CreateFixturePanelProps {
+  canManage: boolean;
   open: boolean;
   fixtureName: string;
   fixtureAgentName: string;
@@ -28,6 +29,7 @@ interface CreateFixturePanelProps {
 }
 
 export function CreateFixturePanel({
+  canManage,
   open,
   fixtureName,
   fixtureAgentName,
@@ -51,14 +53,16 @@ export function CreateFixturePanel({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <span className="micro-label">Créer une fixture benchmark</span>
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={onToggleOpen}
-          aria-label={open ? 'Masquer le formulaire de fixture' : 'Afficher le formulaire de fixture'}
-        >
-          <Plus className="w-3.5 h-3.5" /> {open ? 'FERMER' : 'NOUVELLE FIXTURE'}
-        </button>
+        {canManage ? (
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={onToggleOpen}
+            aria-label={open ? 'Masquer le formulaire de fixture' : 'Afficher le formulaire de fixture'}
+          >
+            <Plus className="w-3.5 h-3.5" /> {open ? 'FERMER' : 'NOUVELLE FIXTURE'}
+          </button>
+        ) : null}
       </div>
 
       {open ? (
