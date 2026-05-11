@@ -89,9 +89,9 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 
 **Tasks**:
 
-- [ ] **1.1** Créer `frontend/src/types/benchmark.ts` avec les types minimaux : `ModelSpec`, `BenchmarkFixture`, `BenchmarkRun`, `BenchmarkCase`, `BenchmarkAttempt`, `BenchmarkScoresV1`, `BenchmarkRunResults` (DM-1  DM-7). *(<=2h)*
-- [ ] **1.2** Ajouter les méthodes API benchmark dans `frontend/src/api/client.ts` (additif) : `listBenchmarkFixtures`, `getBenchmarkFixture`, `listBenchmarkRuns`, `createBenchmarkRun`, `getBenchmarkRun`, `getBenchmarkRunResults` en utilisant `request<T>()`. *(<=2h)*
-- [ ] **1.3** Dclarer/ajuster les types de rponse  incertains avec `unknown` + commentaires TODO liés  OQ-1/RSK-3, sans casser le build. *(<=2h)*
+- [x] **1.1** Créer `frontend/src/types/benchmark.ts` avec les types minimaux : `ModelSpec`, `BenchmarkFixture`, `BenchmarkRun`, `BenchmarkCase`, `BenchmarkAttempt`, `BenchmarkScoresV1`, `BenchmarkRunResults` (DM-1  DM-7). *(<=2h)* (types ajoutés dans `frontend/src/types/benchmark.ts`)
+- [x] **1.2** Ajouter les méthodes API benchmark dans `frontend/src/api/client.ts` (additif) : `listBenchmarkFixtures`, `getBenchmarkFixture`, `listBenchmarkRuns`, `createBenchmarkRun`, `getBenchmarkRun`, `getBenchmarkRunResults` en utilisant `request<T>()`. *(<=2h)* (méthodes API benchmark ajoutées en mode additif)
+- [x] **1.3** Dclarer/ajuster les types de rponse  incertains avec `unknown` + commentaires TODO liés  OQ-1/RSK-3, sans casser le build. *(<=2h)* (types tolérants `extra/raw` + TODO OQ-1/RSK-3)
 
 **Acceptance Criteria**:
 
@@ -416,3 +416,4 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 
 | Phase | Status | Started | Completed | Commit | Notes |
 |-------|--------|---------|-----------|--------|-------|
+| Phase 1 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Types benchmark + méthodes API ajoutés. Build frontend global échoue sur erreurs TS préexistantes hors GH-26 (log runner: `.samourai/tmpai/run-logs-runner/2026-05-11/163816-frontend-build-gh-26-phase-1.log`). |
