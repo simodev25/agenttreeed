@@ -1,6 +1,7 @@
 import { FlaskConical } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { FixturesTable } from './benchmark/FixturesTable';
+import { RunConfigurationPanel } from './benchmark/RunConfigurationPanel';
 import { useBenchmarkPageState } from './benchmark/useBenchmarkPageState';
 
 export function BenchmarkPage() {
@@ -34,19 +35,40 @@ export function BenchmarkPage() {
         </div>
       </div>
 
+      <RunConfigurationPanel
+        fixtures={state.fixtures}
+        selectedFixtureId={state.selectedFixtureId}
+        modelSpecs={state.modelSpecs}
+        repeatCount={state.repeatCount}
+        tagsInput={state.tagsInput}
+        submittingRun={state.submittingRun}
+        submitError={state.submitError}
+        runs={state.runs}
+        onFixtureChange={(fixtureId) => {
+          state.setSelectedFixtureId(fixtureId);
+        }}
+        onModelSpecChange={state.handleModelSpecChange}
+        onAddModelSpec={() =>
+          state.setModelSpecs((prev) => [
+            ...prev,
+            { provider: 'openai', model_name: 'gpt-4o-mini', parameters: { temperature: 0 } },
+          ])
+        }
+        onRemoveModelSpec={(index) => state.setModelSpecs((prev) => prev.filter((_, idx) => idx !== index))}
+        onRepeatCountChange={state.setRepeatCount}
+        onTagsChange={state.setTagsInput}
+        onSubmit={state.handleSubmitRun}
+      />
+
       <div className="hw-surface p-0 overflow-hidden">
         <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border">
-          <span className="text-[11px] font-bold tracking-[0.12em] text-accent uppercase">RUN_CONFIGURATION</span>
+          <span className="text-[11px] font-bold tracking-[0.12em] text-accent uppercase">RUNS</span>
         </div>
         <div className="p-5">
           <p className="text-[11px] text-text-dim">
-            Prochaine étape: formulaire de lancement de run, liste des runs et tableau des résultats V1.
+            Liste des runs et résultats V1 disponibles dans les prochaines phases.
           </p>
-          {state.selectedFixture && (
-            <p className="text-[11px] text-text mt-2">
-              Fixture sélectionnée: <strong>{state.selectedFixture.name}</strong>
-            </p>
-          )}
+          <p className="text-[10px] text-text mt-2">Runs refreshés après lancement: {state.runsCountHint}</p>
         </div>
       </div>
     </div>

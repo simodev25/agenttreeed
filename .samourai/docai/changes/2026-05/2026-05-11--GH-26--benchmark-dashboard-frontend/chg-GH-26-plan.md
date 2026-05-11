@@ -173,9 +173,9 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 
 **Tasks**:
 
-- [ ] **4.1** Ajouter un panneau "RUN_CONFIGURATION" : slection fixture + champs `repeat_count` (optionnel) + `tags` (optionnel). *(<=2h)*
-- [ ] **4.2** Ajouter l'édition des `model_specs` en liste (ajout/suppression ligne) avec validation minimale (au moins 1 modèle + provider/model_name). *(<=2h)*
-- [ ] **4.3** Sur submit, appeler `POST /benchmark/runs` et afficher `ButtonSpinner` pendant soumission, puis rafrachir la liste des runs associés  la fixture. *(<=2h)*
+- [x] **4.1** Ajouter un panneau "RUN_CONFIGURATION" : slection fixture + champs `repeat_count` (optionnel) + `tags` (optionnel). *(<=2h)* (panneau implémenté dans `RunConfigurationPanel.tsx`)
+- [x] **4.2** Ajouter l'édition des `model_specs` en liste (ajout/suppression ligne) avec validation minimale (au moins 1 modèle + provider/model_name). *(<=2h)* (édition dynamique + validation minimale avant submit)
+- [x] **4.3** Sur submit, appeler `POST /benchmark/runs` et afficher `ButtonSpinner` pendant soumission, puis rafrachir la liste des runs associés  la fixture. *(<=2h)* (submit POST + spinner + refresh indicateur de runs)
 
 **Acceptance Criteria**:
 
@@ -419,3 +419,4 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 | Phase 1 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Types benchmark + méthodes API ajoutés. Build frontend global échoue sur erreurs TS préexistantes hors GH-26 (log runner: `.samourai/tmpai/run-logs-runner/2026-05-11/163816-frontend-build-gh-26-phase-1.log`). |
 | Phase 2 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Route `/benchmark` ajoutée dans `App.tsx`, item sidebar BENCHMARK (NODE_07) ajouté dans `Layout.tsx`, page squelette alignée design system créée. |
 | Phase 3 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Chargement fixtures + états loading/error/empty implémentés via hook `useBenchmarkPageState` et composant `FixturesTable`. |
+| Phase 4 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Panneau RUN_CONFIGURATION + édition model_specs + submit POST `/benchmark/runs` avec `ButtonSpinner` implémentés. |
