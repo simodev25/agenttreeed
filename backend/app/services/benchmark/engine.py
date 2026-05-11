@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from typing import Any
 
+from agentscope.message import Msg
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -79,7 +81,21 @@ class BenchmarkEngine:
         repetitions = int(benchmark_run.repetitions)
         model_spec = benchmark_run.model_spec or {}
 
-        context_msg = str((fixture.inputs or {}).get('context') or '')
+        # Build an AgentScope Msg from fixture inputs — agents expect Msg, not str
+        raw_inputs = fixture.inputs or {}
+        context_text = str(raw_inputs.get('context') or '')
+        # Enrich with structured fixture inputs if available
+        extra_parts: list[str] = []
+        for key in ('news_context', 'portfolio_state', 'execution_context',
+                     'phase1_results', 'debate_results'):
+            val = raw_inputs.get(key)
+            if val:
+                extra_parts.append(f"{key}: {json.dumps(val) if isinstance(val, (dict, list)) else val}")
+        if extra_parts:
+            context_text = context_text + '\n\n' + '\n'.join(extra_parts) if context_text else '\n'.join(extra_parts)
+        if not context_text:
+            context_text = f"Benchmark analysis for {fixture.agent_name}"
+        context_msg = Msg("user", context_text, "user")
 
         def _create_analysis_run_record(agent_name: str) -> int:
             pair = str((fixture.inputs or {}).get('symbol') or (fixture.inputs or {}).get('pair') or 'BENCH')
