@@ -117,9 +117,9 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 
 **Tasks**:
 
-- [ ] **2.1** Créer un squelette `frontend/src/pages/BenchmarkPage.tsx` (titre + surfaces) aligné design system. *(<=2h)*
-- [ ] **2.2** Enregistrer la route `/benchmark` dans `frontend/src/App.tsx` via `React.lazy()` + `withLayout(...)`. *(<=2h)*
-- [ ] **2.3** Ajouter l'item "BENCHMARK" dans `frontend/src/components/Layout.tsx` (`navItems`) avec icône Lucide + `node`  dclarer (OQ-2). *(<=2h)*
+- [x] **2.1** Créer un squelette `frontend/src/pages/BenchmarkPage.tsx` (titre + surfaces) aligné design system. *(<=2h)* (page squelette ajoutée avec classes `hw-surface`, `text-accent`, `text-text-dim`)
+- [x] **2.2** Enregistrer la route `/benchmark` dans `frontend/src/App.tsx` via `React.lazy()` + `withLayout(...)`. *(<=2h)* (route lazy `/benchmark` ajoutée dans `App.tsx`)
+- [x] **2.3** Ajouter l'item "BENCHMARK" dans `frontend/src/components/Layout.tsx` (`navItems`) avec icône Lucide + `node`  dclarer (OQ-2). *(<=2h)* (item BENCHMARK ajouté avec icône `Gauge` et `NODE_07`)
 
 **Acceptance Criteria**:
 
@@ -417,3 +417,4 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 | Phase | Status | Started | Completed | Commit | Notes |
 |-------|--------|---------|-----------|--------|-------|
 | Phase 1 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Types benchmark + méthodes API ajoutés. Build frontend global échoue sur erreurs TS préexistantes hors GH-26 (log runner: `.samourai/tmpai/run-logs-runner/2026-05-11/163816-frontend-build-gh-26-phase-1.log`). |
+| Phase 2 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Route `/benchmark` ajoutée dans `App.tsx`, item sidebar BENCHMARK (NODE_07) ajouté dans `Layout.tsx`, page squelette alignée design system créée. |
