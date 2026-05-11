@@ -42,4 +42,8 @@ backend/debug-governance/
 
 .samourai/
 .ai/local/bootstrapper-context.yaml
-.opencode
+
+_bmad
+_bmad-output
+.samourai/tmpai/
+.samourai/ai/local/

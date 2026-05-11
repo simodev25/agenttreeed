@@ -332,6 +332,12 @@ async def build_toolkit(
         if snapshot and tool_id == "trade_sizing":
             preset["price"] = snapshot.get("last_price", 0.0)
             preset["atr"] = snapshot.get("atr", 0.0)
+            # Inject regime from market-context-analyst for adaptive SL/TP
+            if analysis_outputs:
+                _ctx_meta = analysis_outputs.get("market-context-analyst", {}).get("metadata", {})
+                _regime = _ctx_meta.get("regime", "")
+                if _regime:
+                    preset["regime"] = _regime
 
         # Pre-inject trader decision into risk tools so the LLM doesn't
         # need to pass it manually (it often forgets or sends empty).

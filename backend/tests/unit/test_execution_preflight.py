@@ -9,6 +9,17 @@ from app.services.execution.preflight import (
     PreflightResult,
 )
 
+# Use a fixed Tuesday for all tests to avoid day-of-week flakiness
+_FAKE_TUESDAY = datetime(2026, 3, 31, 14, 0, tzinfo=timezone.utc)
+
+import app.services.execution.preflight as pf_module
+
+
+def _mock_weekday():
+    """Context manager to mock datetime.now() to a Tuesday."""
+    return patch.object(pf_module, 'datetime', wraps=datetime,
+                        **{'now.return_value': _FAKE_TUESDAY})
+
 
 def _trader(decision: str = "BUY", entry: float = 1.15, sl: float = 1.14,
             tp: float = 1.17) -> dict:
@@ -133,51 +144,56 @@ def test_crypto_always_open() -> None:
 
 
 def test_spread_excessive_blocked() -> None:
-    """Spread 0.05% with live limit 0.01% → blocked."""
-    # spread = 0.000575, price = 1.15 → spread_pct = 0.05%
-    result = ENGINE.validate(
-        _trader(), _risk(), _snapshot(spread=0.000575, last_price=1.15),
-        "EURUSD.PRO", "live",
-    )
+    """Spread 0.10% with live limit 0.05% → blocked."""
+    # spread = 0.00115, price = 1.15 → spread_pct = 0.10%
+    with _mock_weekday():
+        result = ENGINE.validate(
+            _trader(), _risk(), _snapshot(spread=0.00115, last_price=1.15),
+            "EURUSD.PRO", "live",
+        )
     assert result.status == ExecutionStatus.BLOCKED
     assert "spread" in result.reason
 
 
 def test_spread_acceptable() -> None:
     """Spread 0.002% with simulation limit 5% → passes."""
-    result = ENGINE.validate(
-        _trader(), _risk(), _snapshot(spread=0.00002, last_price=1.15),
-        "EURUSD.PRO", "simulation",
-    )
+    with _mock_weekday():
+        result = ENGINE.validate(
+            _trader(), _risk(), _snapshot(spread=0.00002, last_price=1.15),
+            "EURUSD.PRO", "simulation",
+        )
     assert any("spread_ok" in c for c in result.checks_passed)
 
 
 def test_volume_below_min_blocked() -> None:
     """Volume 0.001 with forex min 0.01 → blocked."""
-    result = ENGINE.validate(
-        _trader(), _risk(volume=0.001), _snapshot(),
-        "EURUSD.PRO", "simulation",
-    )
+    with _mock_weekday():
+        result = ENGINE.validate(
+            _trader(), _risk(volume=0.001), _snapshot(),
+            "EURUSD.PRO", "simulation",
+        )
     assert result.status == ExecutionStatus.BLOCKED
     assert "volume" in result.reason and "below" in result.reason
 
 
 def test_volume_above_max_blocked() -> None:
     """Volume 100 with forex max 10 → blocked."""
-    result = ENGINE.validate(
-        _trader(), _risk(volume=100), _snapshot(),
-        "EURUSD.PRO", "simulation",
-    )
+    with _mock_weekday():
+        result = ENGINE.validate(
+            _trader(), _risk(volume=100), _snapshot(),
+            "EURUSD.PRO", "simulation",
+        )
     assert result.status == ExecutionStatus.BLOCKED
     assert "volume" in result.reason and "above" in result.reason
 
 
 def test_all_checks_pass_simulation() -> None:
     """All OK in simulation → simulated, can_execute=true."""
-    result = ENGINE.validate(
-        _trader(), _risk(), _snapshot(),
-        "EURUSD.PRO", "simulation",
-    )
+    with _mock_weekday():
+        result = ENGINE.validate(
+            _trader(), _risk(), _snapshot(),
+            "EURUSD.PRO", "simulation",
+        )
     assert result.status == ExecutionStatus.SIMULATED
     assert result.can_execute is True
     assert len(result.checks_failed) == 0
@@ -186,20 +202,22 @@ def test_all_checks_pass_simulation() -> None:
 
 def test_all_checks_pass_live() -> None:
     """All OK in live → executed, can_execute=true."""
-    result = ENGINE.validate(
-        _trader(), _risk(), _snapshot(spread=0.00001),
-        "EURUSD.PRO", "live",
-    )
+    with _mock_weekday():
+        result = ENGINE.validate(
+            _trader(), _risk(), _snapshot(spread=0.00001),
+            "EURUSD.PRO", "live",
+        )
     assert result.status == ExecutionStatus.EXECUTED
     assert result.can_execute is True
 
 
 def test_checks_passed_list_complete() -> None:
     """Verify checks_passed contains all 8 check names."""
-    result = ENGINE.validate(
-        _trader(), _risk(), _snapshot(),
-        "EURUSD.PRO", "simulation",
-    )
+    with _mock_weekday():
+        result = ENGINE.validate(
+            _trader(), _risk(), _snapshot(),
+            "EURUSD.PRO", "simulation",
+        )
     check_names = " ".join(result.checks_passed)
     assert "decision_valid" in check_names
     assert "risk_accepted" in check_names

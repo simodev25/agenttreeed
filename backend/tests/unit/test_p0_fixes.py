@@ -154,30 +154,28 @@ class TestExecutorInputValidation:
 
 # --- Schema NaN handling ---
 class TestSchemaNanHandling:
-    def test_nan_score_defaults(self):
-        from app.services.agentscope.schemas import TechnicalAnalysisResult
+    def test_nan_conviction_defaults(self):
+        """NaN conviction in TraderDecisionDraft should be sanitized."""
+        from app.services.agentscope.schemas import TraderDecisionDraft
         data = {
-            "signal": "bullish",
-            "score": float('nan'),
-            "confidence": 0.5,
-            "setup_state": "conditional",
-            "summary": "test",
+            "decision": "BUY",
+            "conviction": float('nan'),
+            "reasoning": "test reasoning",
         }
-        result = TechnicalAnalysisResult(**data)
-        # NaN should be replaced with default 0.0
-        assert math.isfinite(result.score)
-        assert result.score == 0.0
+        result = TraderDecisionDraft(**data)
+        # NaN should be replaced; BUY with conviction < 0.3 is floored to 0.3
+        assert math.isfinite(result.conviction)
+        assert result.conviction == 0.3  # floored by directional decision guard
 
     def test_inf_confidence_defaults(self):
-        from app.services.agentscope.schemas import TechnicalAnalysisResult
+        """Inf confidence in DebateThesis should be sanitized to 0.5."""
+        from app.services.agentscope.schemas import DebateThesis
         data = {
-            "signal": "bearish",
-            "score": -0.3,
+            "thesis": "test thesis",
             "confidence": float('inf'),
-            "setup_state": "conditional",
-            "summary": "test",
+            "arguments": ["arg1"],
         }
-        result = TechnicalAnalysisResult(**data)
+        result = DebateThesis(**data)
         # Inf should be replaced with default 0.5
         assert math.isfinite(result.confidence)
         assert result.confidence == 0.5

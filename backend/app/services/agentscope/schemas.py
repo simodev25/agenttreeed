@@ -184,7 +184,8 @@ class DebateThesis(_SchemaBase):
         if isinstance(data, dict):
             if "confidence" in data:
                 try:
-                    data["confidence"] = max(0.0, min(1.0, float(data["confidence"])))
+                    val = float(data["confidence"])
+                    data["confidence"] = max(0.0, min(1.0, val)) if math.isfinite(val) else 0.5
                 except (TypeError, ValueError):
                     data["confidence"] = 0.5
             for field in ("arguments", "invalidation_conditions"):
@@ -272,13 +273,15 @@ class TraderDecisionDraft(_SchemaBase):
                 data["decision"] = _normalize_decision(data["decision"])
             if "conviction" in data:
                 try:
-                    data["conviction"] = max(0.0, min(1.0, float(data["conviction"])))
+                    val = float(data["conviction"])
+                    data["conviction"] = max(0.0, min(1.0, val)) if math.isfinite(val) else 0.0
                 except (TypeError, ValueError):
                     data["conviction"] = 0.0
             # Legacy compat: map confidence → conviction
             if "confidence" in data and "conviction" not in data:
                 try:
-                    data["conviction"] = max(0.0, min(1.0, float(data["confidence"])))
+                    val = float(data["confidence"])
+                    data["conviction"] = max(0.0, min(1.0, val)) if math.isfinite(val) else 0.0
                 except (TypeError, ValueError):
                     data["conviction"] = 0.0
             # Floor conviction for directional decisions: conviction=0.0 with BUY/SELL is
@@ -375,7 +378,8 @@ class GovernanceDecision(_SchemaBase):
             # Normalize conviction
             if "conviction" in data:
                 try:
-                    data["conviction"] = max(0.0, min(1.0, float(data["conviction"])))
+                    val = float(data["conviction"])
+                    data["conviction"] = max(0.0, min(1.0, val)) if math.isfinite(val) else 0.5
                 except (TypeError, ValueError):
                     data["conviction"] = 0.5
             # Normalize urgency

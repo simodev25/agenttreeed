@@ -1155,7 +1155,7 @@ from app.services.agentscope.constants import (
     TREND_WEIGHT, EMA_WEIGHT, RSI_WEIGHT, MACD_WEIGHT, CHANGE_WEIGHT,
     PATTERN_WEIGHT, DIVERGENCE_WEIGHT, MULTI_TF_WEIGHT, LEVEL_WEIGHT,
     SL_ATR_MULTIPLIER, TP_ATR_MULTIPLIER, SL_PERCENT_FALLBACK, TP_PERCENT_FALLBACK,
-    TECHNICAL_SIGNAL_THRESHOLD, DECISION_MODES,
+    TECHNICAL_SIGNAL_THRESHOLD, DECISION_MODES, get_sl_tp_multipliers,
 )
 
 
@@ -1316,8 +1316,13 @@ def trade_sizing(
     decision_side: str = "BUY",
     decision_mode: str = "balanced",
     execution_mode: str = "simulation",
+    regime: str = "",
 ) -> dict:
-    """Compute entry, stop-loss, and take-profit from ATR (with runtime DB overrides)."""
+    """Compute entry, stop-loss, and take-profit from ATR (with runtime DB overrides).
+
+    When ``regime`` is provided (e.g. "trending_up", "ranging", "volatile", "calm"),
+    SL/TP multipliers are adapted to the market regime for better risk/reward.
+    """
     _min_sl_pct = 0.05
     try:
         from app.services.config.trading_config import get_effective_sizing
@@ -1328,6 +1333,13 @@ def trade_sizing(
     except Exception:
         _sl_mult = SL_ATR_MULTIPLIER
         _tp_mult = TP_ATR_MULTIPLIER
+
+    # Apply regime-adaptive multipliers (override defaults if regime is known)
+    if regime:
+        regime_sl, regime_tp = get_sl_tp_multipliers(regime)
+        _sl_mult = regime_sl
+        _tp_mult = regime_tp
+
     sl_dist = atr * _sl_mult if atr > 0 else price * SL_PERCENT_FALLBACK
     tp_dist = atr * _tp_mult if atr > 0 else price * TP_PERCENT_FALLBACK
     # Enforce min_sl_distance_pct: widen SL if too tight
