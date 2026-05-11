@@ -82,7 +82,7 @@ export function useBenchmarkPageState(token: string | null, userRole: string | n
 
   const canManage = useMemo(() => {
     const normalizedRole = userRole?.toLowerCase() ?? '';
-    return normalizedRole === 'admin' || normalizedRole === 'super_admin';
+    return normalizedRole === 'admin' || normalizedRole === 'super_admin' || normalizedRole === 'super-admin';
   }, [userRole]);
 
   const loadRuns = useCallback(
