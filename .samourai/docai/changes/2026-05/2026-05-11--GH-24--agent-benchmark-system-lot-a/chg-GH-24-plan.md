@@ -89,15 +89,18 @@ Objectifs principaux (spec §4) :
 
 **Tasks**:
 
-- [ ] **1.1** Définir les enums et statuts run (`PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `SKIPPED_DEBATE`, `CANCELLED`) et les valeurs `scenario_type` (F-2, F-4 ; AC-F2-1, AC-F4-4).
-- [ ] **1.2** Créer la migration Alembic additive pour **DM-1..DM-4** (4 tables + index + FKs lecture seule vers `analysis_run` si applicable) (F-1, F-2, F-8 ; KPIs).
-- [ ] **1.3** Implémenter les modèles SQLAlchemy pour : `benchmark_fixture`, `benchmark_run`, `benchmark_case`, `benchmark_attempt` (DM-1..DM-4) (F-1..F-8).
-- [ ] **1.4** Ajouter le wiring ORM minimal (imports/registry) pour rendre les modèles utilisables par l’API et les services (F-6).
+- [x] **1.1** Définir les enums et statuts run (`PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `SKIPPED_DEBATE`, `CANCELLED`) et les valeurs `scenario_type` (F-2, F-4 ; AC-F2-1, AC-F4-4). (implémenté dans `backend/app/services/benchmark/constants.py` + schémas)
+- [x] **1.2** Créer la migration Alembic additive pour **DM-1..DM-4** (4 tables + index + FKs lecture seule vers `analysis_run` si applicable) (F-1, F-2, F-8 ; KPIs). (migration `backend/alembic/versions/0013_gh24_benchmark_tables.py`)
+- [x] **1.3** Implémenter les modèles SQLAlchemy pour : `benchmark_fixture`, `benchmark_run`, `benchmark_case`, `benchmark_attempt` (DM-1..DM-4) (F-1..F-8). (modèles ajoutés dans `backend/app/db/models/benchmark_*.py`)
+- [x] **1.4** Ajouter le wiring ORM minimal (imports/registry) pour rendre les modèles utilisables par l’API et les services (F-6). (`backend/app/db/models/__init__.py` + `llm_call_logs.analysis_run_id`)
 
 **Acceptance Criteria**:
 
 - Must: Migration Alembic crée les 4 tables avec index/FKs (DM-1..DM-4).
 - Must: Aucune modification des tables existantes (spec §8.5).
+
+Criterion: Migration Alembic crée les 4 tables avec index/FKs (DM-1..DM-4) — PASSED (migration `0013_gh24_benchmark_tables.py` ajoutée + index/FKs).
+Criterion: Aucune modification des tables existantes (spec §8.5) — PASSED (changement additif uniquement, aucune altération destructive).
 
 **Files and modules**:
 
