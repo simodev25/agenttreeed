@@ -145,9 +145,9 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 
 **Tasks**:
 
-- [ ] **3.1** Implémenter le chargement initial `GET /benchmark/fixtures` avec `useAuth()` + gestion `loading/error` (pattern `request<T>()` / ErrorBoundary). *(<=2h)*
-- [ ] **3.2** Rendre un tableau/liste fixtures : nom, `agent_key`, `scenario_type`, date de création, avec styles `.hw-surface*` et classes text. *(<=2h)*
-- [ ] **3.3** Implémenter l'état vide : message "Aucune fixture disponible" (AC-F2-2). *(<=2h)*
+- [x] **3.1** Implémenter le chargement initial `GET /benchmark/fixtures` avec `useAuth()` + gestion `loading/error` (pattern `request<T>()` / ErrorBoundary). *(<=2h)* (chargement implémenté via `useBenchmarkPageState` + `useAuth` + gestion loading/error)
+- [x] **3.2** Rendre un tableau/liste fixtures : nom, `agent_key`, `scenario_type`, date de création, avec styles `.hw-surface*` et classes text. *(<=2h)* (table fixtures rendue dans `FixturesTable.tsx` avec style design system)
+- [x] **3.3** Implémenter l'état vide : message "Aucune fixture disponible" (AC-F2-2). *(<=2h)* (empty state affiché dans `FixturesTable.tsx`)
 
 **Acceptance Criteria**:
 
@@ -418,3 +418,4 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 |-------|--------|---------|-----------|--------|-------|
 | Phase 1 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Types benchmark + méthodes API ajoutés. Build frontend global échoue sur erreurs TS préexistantes hors GH-26 (log runner: `.samourai/tmpai/run-logs-runner/2026-05-11/163816-frontend-build-gh-26-phase-1.log`). |
 | Phase 2 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Route `/benchmark` ajoutée dans `App.tsx`, item sidebar BENCHMARK (NODE_07) ajouté dans `Layout.tsx`, page squelette alignée design system créée. |
+| Phase 3 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Chargement fixtures + états loading/error/empty implémentés via hook `useBenchmarkPageState` et composant `FixturesTable`. |
