@@ -1,21 +1,16 @@
 import { Plus } from 'lucide-react';
 import { ButtonSpinner } from '../../components/LoadingIndicators';
-
-const BENCHMARK_AGENTS = [
-  'technical-analyst',
-  'news-analyst',
-  'market-context-analyst',
-  'bullish-researcher',
-  'bearish-researcher',
-  'trader-agent',
-  'risk-manager',
-  'execution-manager',
-] as const;
+import {
+  BENCHMARK_AGENTS,
+  MARKET_PRESETS,
+  type FixturePresetId,
+} from './fixturePresets';
 
 interface CreateFixturePanelProps {
   open: boolean;
   fixtureName: string;
   fixtureAgentName: string;
+  fixturePresetId: FixturePresetId;
   fixtureInputsText: string;
   fixtureConfigText: string;
   createFixtureSubmitting: boolean;
@@ -25,6 +20,7 @@ interface CreateFixturePanelProps {
   onToggleOpen: () => void;
   onNameChange: (value: string) => void;
   onAgentChange: (value: string) => void;
+  onPresetChange: (value: FixturePresetId) => void;
   onInputsChange: (value: string) => void;
   onConfigChange: (value: string) => void;
   onCreate: () => void;
@@ -35,6 +31,7 @@ export function CreateFixturePanel({
   open,
   fixtureName,
   fixtureAgentName,
+  fixturePresetId,
   fixtureInputsText,
   fixtureConfigText,
   createFixtureSubmitting,
@@ -44,6 +41,7 @@ export function CreateFixturePanel({
   onToggleOpen,
   onNameChange,
   onAgentChange,
+  onPresetChange,
   onInputsChange,
   onConfigChange,
   onCreate,
@@ -95,6 +93,21 @@ export function CreateFixturePanel({
             </div>
 
             <div>
+              <label className="micro-label block mb-1.5" htmlFor="benchmark-fixture-preset">Preset de marché</label>
+              <select
+                id="benchmark-fixture-preset"
+                value={fixturePresetId}
+                onChange={(event) => onPresetChange(event.target.value as FixturePresetId)}
+                className="mb-2"
+                aria-label="Preset de marché pour les inputs"
+              >
+                {MARKET_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-text-dim mb-2">Sélectionnez un preset pour pré-remplir les inputs marché.</p>
               <label className="micro-label block mb-1.5" htmlFor="benchmark-fixture-inputs">Inputs (JSON)</label>
               <textarea
                 id="benchmark-fixture-inputs"

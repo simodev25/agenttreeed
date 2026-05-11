@@ -449,6 +449,38 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 
 **Completion signal**: `feat(GH-26): add benchmark fixture creation form`
 
+---
+
+### Phase 14: Fixture Inputs Presets & Agent Templates
+
+**Goal**: Pré-remplir des inputs benchmark réalistes par agent + preset marché pour rendre la création de fixture immédiatement utilisable.
+
+**Tasks**:
+
+- [x] **14.1** Créer `frontend/src/pages/benchmark/fixturePresets.ts` avec 3 presets marché réalistes (`EURUSD H1` haussier, `BTCUSD H4` range, `GBPJPY M15` baissier), OHLC 50+ bougies et snapshot cohérent (`last_price`, RSI, EMA, MACD diff, ATR, trend). *(<=2h)* (module `fixturePresets.ts` ajouté avec génération OHLC déterministe 60-84 bougies + snapshots cohérents)
+- [x] **14.2** Étendre `CreateFixturePanel.tsx` avec un dropdown `Preset de marché` au-dessus de `Inputs (JSON)` + options presets et microcopy design-system. *(<=2h)* (`CreateFixturePanel` mis à jour avec `MARKET_PRESETS`, champ `Preset de marché` et callbacks dédiés)
+- [x] **14.3** Adapter `useBenchmarkPageState.ts` pour pré-remplir automatiquement `inputs` au changement d'agent (reset sur preset `EURUSD H1`) et au changement de preset, tout en initialisant `config` par défaut à `{"llm_enabled": true}`. *(<=2h)* (`handleFixtureAgentChange` + `handleFixturePresetChange` + `formatFixtureConfig()` appliqués)
+- [x] **14.4** Exécuter la validation frontend (`cd frontend && npm run build`) et documenter le résultat. *(<=2h)* (build exécuté via runner, échec sur erreurs TS préexistantes hors périmètre GH-26 ; log `.samourai/tmpai/run-logs-runner/2026-05-11/212154-npm-run-build.log`)
+
+**Acceptance Criteria**:
+
+- Criterion: Sélection d'un agent pré-remplit `Inputs (JSON)` avec un template réaliste basé sur preset `EURUSD H1` par défaut — PASSED (`handleFixtureAgentChange` dans `useBenchmarkPageState.ts` + `buildFixtureInputs` dans `fixturePresets.ts`).
+- Criterion: Le formulaire expose un dropdown `Preset de marché` (`EURUSD H1`, `BTCUSD H4`, `GBPJPY M15`) qui met à jour les inputs sans bloquer l'édition manuelle — PASSED (`CreateFixturePanel.tsx` + handlers preset côté state).
+- Criterion: `config` est initialisée à `{"llm_enabled": true}` par défaut — PASSED (`DEFAULT_FIXTURE_CONFIG` + `formatFixtureConfig`).
+
+**Files and modules**:
+
+- `frontend/src/pages/benchmark/fixturePresets.ts`
+- `frontend/src/pages/benchmark/CreateFixturePanel.tsx`
+- `frontend/src/pages/benchmark/useBenchmarkPageState.ts`
+- `frontend/src/pages/BenchmarkPage.tsx`
+
+**Tests**:
+
+- `cd frontend && npm run build`
+
+**Completion signal**: `feat(GH-26): add realistic fixture input presets per agent`
+
 ## Test Scenarios
 
 | ID | Scénario | Phases | AC |
@@ -482,6 +514,7 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 | 1.0 | 2026-05-11 | plan-writer | Plan initial (phases 1–11) aligné sur la spec GH-26 |
 | 1.1 | 2026-05-11 | reviewer | Ajout Phase 12 « Code Review Remediation (Iteration 1) » suite à review locale (écarts AC/robustesse API/plan audit). |
 | 1.2 | 2026-05-11 | coder | Ajout Phase 13 « Fixture Creation Form (Frontend) » pour couvrir la création de fixture via UI + validation JSON + POST/refresh. |
+| 1.3 | 2026-05-11 | coder | Ajout Phase 14 « Fixture Inputs Presets & Agent Templates » pour préremplissage réaliste des inputs (agent + preset marché) et config défaut LLM. |
 
 ## Execution Log
 
@@ -496,3 +529,4 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 | Phase 7 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Détail run (`ExpansionPanel`) branché dans la page avec cases/attempts, scores et raw output texte brut. |
 | Phase 12 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Remédiations review itération 1 appliquées: comparaison branchée, robustesse runs, fallback `/results` explicite, détail run complété. |
 | Phase 13 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Formulaire de création fixture ajouté dans `/benchmark` avec validation JSON objet, POST `/benchmark/fixtures`, refresh fixtures et sélection de la fixture créée. Build frontend relancé (échec sur dette TS hors scope GH-26 ; log runner `205525-frontend-build.log`). |
+| Phase 14 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Presets marché + templates agent ajoutés pour pré-remplir `Inputs (JSON)` (EURUSD H1/BTCUSD H4/GBPJPY M15, OHLC réalistes 50+). Dropdown preset ajouté et config défaut `{"llm_enabled": true}`. Build relancé (échec hors scope GH-26 ; log runner `212154-npm-run-build.log`). |

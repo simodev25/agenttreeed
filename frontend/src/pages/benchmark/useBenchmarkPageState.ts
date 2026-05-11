@@ -9,6 +9,14 @@ import type {
   BenchmarkRunResults,
   ModelSpec,
 } from '../../types/benchmark';
+import {
+  BENCHMARK_AGENTS,
+  DEFAULT_MARKET_PRESET_ID,
+  formatFixtureConfig,
+  formatFixtureInputs,
+  type BenchmarkAgentName,
+  type FixturePresetId,
+} from './fixturePresets';
 
 const DEFAULT_MODEL_SPEC: ModelSpec = {
   provider: 'openai',
@@ -51,9 +59,12 @@ export function useBenchmarkPageState(token: string | null) {
 
   const [showCreateFixtureForm, setShowCreateFixtureForm] = useState(false);
   const [fixtureName, setFixtureName] = useState('');
-  const [fixtureAgentName, setFixtureAgentName] = useState('technical-analyst');
-  const [fixtureInputsText, setFixtureInputsText] = useState('{\n  "pair": "EURUSD",\n  "timeframe": "H1"\n}');
-  const [fixtureConfigText, setFixtureConfigText] = useState('{}');
+  const [fixtureAgentName, setFixtureAgentName] = useState<BenchmarkAgentName>('technical-analyst');
+  const [fixturePresetId, setFixturePresetId] = useState<FixturePresetId>(DEFAULT_MARKET_PRESET_ID);
+  const [fixtureInputsText, setFixtureInputsText] = useState(() =>
+    formatFixtureInputs('technical-analyst', DEFAULT_MARKET_PRESET_ID),
+  );
+  const [fixtureConfigText, setFixtureConfigText] = useState(() => formatFixtureConfig());
   const [createFixtureSubmitting, setCreateFixtureSubmitting] = useState(false);
   const [createFixtureError, setCreateFixtureError] = useState<string | null>(null);
   const [fixtureInputsError, setFixtureInputsError] = useState<string | null>(null);
@@ -259,9 +270,30 @@ export function useBenchmarkPageState(token: string | null) {
   const resetCreateFixtureForm = () => {
     setFixtureName('');
     setFixtureAgentName('technical-analyst');
-    setFixtureInputsText('{\n  "pair": "EURUSD",\n  "timeframe": "H1"\n}');
-    setFixtureConfigText('{}');
+    setFixturePresetId(DEFAULT_MARKET_PRESET_ID);
+    setFixtureInputsText(formatFixtureInputs('technical-analyst', DEFAULT_MARKET_PRESET_ID));
+    setFixtureConfigText(formatFixtureConfig());
     setCreateFixtureError(null);
+    setFixtureInputsError(null);
+    setFixtureConfigError(null);
+  };
+
+  const handleFixtureAgentChange = (agentName: string) => {
+    const nextAgent = BENCHMARK_AGENTS.includes(agentName as BenchmarkAgentName)
+      ? (agentName as BenchmarkAgentName)
+      : 'technical-analyst';
+    setFixtureAgentName(nextAgent);
+    setFixturePresetId(DEFAULT_MARKET_PRESET_ID);
+    setFixtureInputsText(formatFixtureInputs(nextAgent, DEFAULT_MARKET_PRESET_ID));
+    setFixtureConfigText(formatFixtureConfig());
+    setFixtureInputsError(null);
+    setFixtureConfigError(null);
+  };
+
+  const handleFixturePresetChange = (presetId: FixturePresetId) => {
+    setFixturePresetId(presetId);
+    setFixtureInputsText(formatFixtureInputs(fixtureAgentName, presetId));
+    setFixtureConfigText(formatFixtureConfig());
     setFixtureInputsError(null);
     setFixtureConfigError(null);
   };
@@ -349,6 +381,7 @@ export function useBenchmarkPageState(token: string | null) {
     showCreateFixtureForm,
     fixtureName,
     fixtureAgentName,
+    fixturePresetId,
     fixtureInputsText,
     fixtureConfigText,
     createFixtureSubmitting,
@@ -365,8 +398,11 @@ export function useBenchmarkPageState(token: string | null) {
     setShowCreateFixtureForm,
     setFixtureName,
     setFixtureAgentName,
+    setFixturePresetId,
     setFixtureInputsText,
     setFixtureConfigText,
+    handleFixtureAgentChange,
+    handleFixturePresetChange,
     handleModelSpecChange,
     handleSubmitRun,
     handleSelectFixture,

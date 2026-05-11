@@ -31,6 +31,7 @@ export function BenchmarkPage() {
             open={state.showCreateFixtureForm}
             fixtureName={state.fixtureName}
             fixtureAgentName={state.fixtureAgentName}
+            fixturePresetId={state.fixturePresetId}
             fixtureInputsText={state.fixtureInputsText}
             fixtureConfigText={state.fixtureConfigText}
             createFixtureSubmitting={state.createFixtureSubmitting}
@@ -45,7 +46,8 @@ export function BenchmarkPage() {
               }
             }}
             onNameChange={state.setFixtureName}
-            onAgentChange={state.setFixtureAgentName}
+            onAgentChange={state.handleFixtureAgentChange}
+            onPresetChange={state.handleFixturePresetChange}
             onInputsChange={state.setFixtureInputsText}
             onConfigChange={state.setFixtureConfigText}
             onCreate={() => {
