@@ -18,6 +18,14 @@ import {
   type FixturePresetId,
 } from './fixturePresets';
 
+const MODEL_PROVIDER_OPTIONS = ['ollama', 'openai', 'mistral'] as const;
+
+const DEFAULT_MODEL_BY_PROVIDER: Record<(typeof MODEL_PROVIDER_OPTIONS)[number], string> = {
+  ollama: 'deepseek-v3.2',
+  openai: 'gpt-4o-mini',
+  mistral: 'mistral-small-latest',
+};
+
 const DEFAULT_MODEL_SPEC: ModelSpec = {
   provider: 'openai',
   model_name: 'gpt-4o-mini',
@@ -48,6 +56,10 @@ export function useBenchmarkPageState(token: string | null, userRole: string | n
   const [runResultsNotice, setRunResultsNotice] = useState<string | null>(null);
 
   const [modelSpecs, setModelSpecs] = useState<ModelSpec[]>([DEFAULT_MODEL_SPEC]);
+  const [modelChoicesByProvider, setModelChoicesByProvider] = useState<Record<string, string[]>>({});
+  const [modelChoicesLoadingByProvider, setModelChoicesLoadingByProvider] = useState<Record<string, boolean>>({});
+  const [modelChoices, setModelChoices] = useState<string[]>([]);
+  const [modelChoicesLoading, setModelChoicesLoading] = useState(false);
   const [repeatCount, setRepeatCount] = useState('3');
   const [tagsInput, setTagsInput] = useState('');
   const [submittingRun, setSubmittingRun] = useState(false);
@@ -211,6 +223,92 @@ export function useBenchmarkPageState(token: string | null, userRole: string | n
       return next;
     });
   };
+
+  const loadModelChoices = useCallback(
+    async (provider: string) => {
+      const normalizedProvider = provider.trim().toLowerCase();
+      if (!normalizedProvider || !MODEL_PROVIDER_OPTIONS.includes(normalizedProvider as (typeof MODEL_PROVIDER_OPTIONS)[number])) {
+        return;
+      }
+      if (!token) return;
+
+      setModelChoicesLoadingByProvider((prev) => ({ ...prev, [normalizedProvider]: true }));
+      try {
+        const payload = await api.listOllamaModels(token, normalizedProvider);
+        const nextChoices = Array.isArray(payload.models)
+          ? payload.models.map((item) => String(item).trim()).filter((item) => item.length > 0)
+          : [];
+        setModelChoicesByProvider((prev) => ({ ...prev, [normalizedProvider]: nextChoices }));
+      } catch {
+        setModelChoicesByProvider((prev) => ({ ...prev, [normalizedProvider]: [] }));
+      } finally {
+        setModelChoicesLoadingByProvider((prev) => ({ ...prev, [normalizedProvider]: false }));
+      }
+    },
+    [token],
+  );
+
+  useEffect(() => {
+    const providers = Array.from(
+      new Set(
+        modelSpecs
+          .map((spec) => (typeof spec.provider === 'string' ? spec.provider.trim().toLowerCase() : ''))
+          .filter((provider) => MODEL_PROVIDER_OPTIONS.includes(provider as (typeof MODEL_PROVIDER_OPTIONS)[number])),
+      ),
+    );
+    providers.forEach((provider) => {
+      const alreadyLoaded = Array.isArray(modelChoicesByProvider[provider]);
+      const alreadyLoading = Boolean(modelChoicesLoadingByProvider[provider]);
+      if (alreadyLoaded || alreadyLoading) return;
+      void loadModelChoices(provider);
+    });
+  }, [modelSpecs, modelChoicesByProvider, modelChoicesLoadingByProvider, loadModelChoices]);
+
+  useEffect(() => {
+    setModelSpecs((prev) => {
+      let hasChanges = false;
+      const next = prev.map((spec) => {
+        const provider = typeof spec.provider === 'string' ? spec.provider.trim().toLowerCase() : '';
+        if (!MODEL_PROVIDER_OPTIONS.includes(provider as (typeof MODEL_PROVIDER_OPTIONS)[number])) {
+          return spec;
+        }
+
+        const providerChoices = modelChoicesByProvider[provider] ?? [];
+        if (providerChoices.length === 0) {
+          return spec;
+        }
+
+        const currentModelName = typeof spec.model_name === 'string' ? spec.model_name.trim() : '';
+        const preferredDefault = DEFAULT_MODEL_BY_PROVIDER[provider as (typeof MODEL_PROVIDER_OPTIONS)[number]];
+        const nextDefault = providerChoices.includes(preferredDefault) ? preferredDefault : providerChoices[0];
+        const shouldResetModel = !currentModelName || !providerChoices.includes(currentModelName);
+
+        if (!shouldResetModel || !nextDefault) {
+          return spec;
+        }
+
+        hasChanges = true;
+        return {
+          ...spec,
+          model_name: nextDefault,
+        };
+      });
+
+      return hasChanges ? next : prev;
+    });
+  }, [modelChoicesByProvider]);
+
+  useEffect(() => {
+    const activeProviderRaw = modelSpecs[0]?.provider;
+    const activeProvider = typeof activeProviderRaw === 'string' ? activeProviderRaw.trim().toLowerCase() : '';
+    if (!MODEL_PROVIDER_OPTIONS.includes(activeProvider as (typeof MODEL_PROVIDER_OPTIONS)[number])) {
+      setModelChoices([]);
+      setModelChoicesLoading(false);
+      return;
+    }
+    setModelChoices(modelChoicesByProvider[activeProvider] ?? []);
+    setModelChoicesLoading(Boolean(modelChoicesLoadingByProvider[activeProvider]));
+  }, [modelChoicesByProvider, modelChoicesLoadingByProvider, modelSpecs]);
 
   const handleSubmitRun = async () => {
     if (!canManage || !token || !selectedFixture) return;
@@ -391,6 +489,10 @@ export function useBenchmarkPageState(token: string | null, userRole: string | n
     runResults,
     runResultsNotice,
     modelSpecs,
+    modelChoices,
+    modelChoicesLoading,
+    modelChoicesByProvider,
+    modelChoicesLoadingByProvider,
     repeatCount,
     tagsInput,
     submittingRun,

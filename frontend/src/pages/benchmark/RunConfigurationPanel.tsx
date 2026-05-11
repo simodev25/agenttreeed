@@ -2,10 +2,15 @@ import { Plus, Trash2, Play } from 'lucide-react';
 import { ButtonSpinner } from '../../components/LoadingIndicators';
 import type { BenchmarkFixture, BenchmarkRun, ModelSpec } from '../../types/benchmark';
 
+const PROVIDER_OPTIONS = ['ollama', 'openai', 'mistral'] as const;
+const CUSTOM_MODEL_VALUE = '__custom__';
+
 interface RunConfigurationPanelProps {
   fixtures: BenchmarkFixture[];
   selectedFixtureId: number | null;
   modelSpecs: ModelSpec[];
+  modelChoicesByProvider: Record<string, string[]>;
+  modelChoicesLoadingByProvider: Record<string, boolean>;
   repeatCount: string;
   tagsInput: string;
   submittingRun: boolean;
@@ -28,6 +33,8 @@ export function RunConfigurationPanel({
   fixtures,
   selectedFixtureId,
   modelSpecs,
+  modelChoicesByProvider,
+  modelChoicesLoadingByProvider,
   repeatCount,
   tagsInput,
   submittingRun,
@@ -104,25 +111,65 @@ export function RunConfigurationPanel({
         <div className="space-y-2">
           {modelSpecs.map((spec, index) => (
             <div key={`${index}-${getFieldValue(spec.provider)}-${getFieldValue(spec.model_name)}`} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
+              {(() => {
+                const provider = getFieldValue(spec.provider).trim().toLowerCase();
+                const modelName = getFieldValue(spec.model_name);
+                const providerChoices = modelChoicesByProvider[provider] ?? [];
+                const providerLoading = Boolean(modelChoicesLoadingByProvider[provider]);
+                const hasChoices = providerChoices.length > 0;
+                const isCustomModel = modelName.length > 0 && !providerChoices.includes(modelName);
+
+                return (
+                  <>
               <div>
                 <label className="micro-label block mb-1.5" htmlFor={`provider-${index}`}>Provider</label>
-                <input
+                <select
                   id={`provider-${index}`}
-                  type="text"
                   value={getFieldValue(spec.provider)}
                   onChange={(event) => onModelSpecChange(index, 'provider', event.target.value)}
                   aria-label={`Provider modèle ${index + 1}`}
-                />
+                >
+                  {PROVIDER_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="micro-label block mb-1.5" htmlFor={`model-name-${index}`}>Model name</label>
-                <input
+                <select
                   id={`model-name-${index}`}
-                  type="text"
-                  value={getFieldValue(spec.model_name)}
-                  onChange={(event) => onModelSpecChange(index, 'model_name', event.target.value)}
+                  value={isCustomModel ? CUSTOM_MODEL_VALUE : modelName}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    if (nextValue === CUSTOM_MODEL_VALUE) {
+                      if (!isCustomModel && modelName.length === 0) {
+                        onModelSpecChange(index, 'model_name', '');
+                      }
+                      return;
+                    }
+                    onModelSpecChange(index, 'model_name', nextValue);
+                  }}
                   aria-label={`Nom du modèle ${index + 1}`}
-                />
+                >
+                  {providerLoading ? <option value="">Chargement...</option> : null}
+                  {!providerLoading && !hasChoices ? <option value="">Aucun modèle disponible</option> : null}
+                  {!providerLoading && hasChoices
+                    ? providerChoices.map((choice) => (
+                      <option key={choice} value={choice}>{choice}</option>
+                    ))
+                    : null}
+                  <option value={CUSTOM_MODEL_VALUE}>Autre...</option>
+                </select>
+                {isCustomModel || (!providerLoading && !hasChoices) ? (
+                  <input
+                    className="mt-1.5"
+                    type="text"
+                    value={modelName}
+                    onChange={(event) => onModelSpecChange(index, 'model_name', event.target.value)}
+                    placeholder="Saisir un nom de modèle"
+                    aria-label={`Nom libre du modèle ${index + 1}`}
+                  />
+                ) : null}
               </div>
               <div>
                 <label className="micro-label block mb-1.5" htmlFor={`temperature-${index}`}>Temperature</label>
@@ -146,6 +193,9 @@ export function RunConfigurationPanel({
                   <Trash2 className="w-3.5 h-3.5" /> RETIRER
                 </button>
               </div>
+                  </>
+                );
+              })()}
             </div>
           ))}
         </div>

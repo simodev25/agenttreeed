@@ -78,6 +78,8 @@ export function BenchmarkPage() {
           fixtures={state.fixtures}
           selectedFixtureId={state.selectedFixtureId}
           modelSpecs={state.modelSpecs}
+          modelChoicesByProvider={state.modelChoicesByProvider}
+          modelChoicesLoadingByProvider={state.modelChoicesLoadingByProvider}
           repeatCount={state.repeatCount}
           tagsInput={state.tagsInput}
           submittingRun={state.submittingRun}
