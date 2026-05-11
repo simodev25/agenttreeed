@@ -4,6 +4,7 @@ import { FixturesTable } from './benchmark/FixturesTable';
 import { RunConfigurationPanel } from './benchmark/RunConfigurationPanel';
 import { RunsTable } from './benchmark/RunsTable';
 import { ResultsTable } from './benchmark/ResultsTables';
+import { RunDetailPanel } from './benchmark/RunDetailPanel';
 import { useBenchmarkPageState } from './benchmark/useBenchmarkPageState';
 
 export function BenchmarkPage() {
@@ -78,6 +79,12 @@ export function BenchmarkPage() {
 
       <ResultsTable
         selectedRun={state.selectedRun}
+        runDetail={state.runDetail}
+        loading={state.runDetailLoading}
+        error={state.runDetailError}
+      />
+
+      <RunDetailPanel
         runDetail={state.runDetail}
         loading={state.runDetailLoading}
         error={state.runDetailError}

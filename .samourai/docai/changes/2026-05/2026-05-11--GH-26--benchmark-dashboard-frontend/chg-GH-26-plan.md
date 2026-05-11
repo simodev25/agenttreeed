@@ -256,9 +256,9 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 
 **Tasks**:
 
-- [x] **7.1** Ajouter un panneau détail (pattern `ExpansionPanel`)  l'ouverture d'un run slectionné, avec appel `GET /benchmark/runs/{id}`. *(<=2h)* (`RunDetailPanel` + chargement `getBenchmarkRun`)
+- [x] **7.1** Ajouter un panneau détail (pattern `ExpansionPanel`)  l'ouverture d'un run slectionné, avec appel `GET /benchmark/runs/{id}`. *(<=2h)* (`RunDetailPanel` branché sur `BenchmarkPage`)
 - [x] **7.2** Rendre la liste des `BenchmarkCase` avec statut + indicateurs (latence, tokens) et afficher les `BenchmarkAttempt` imbriqués (peut être un sous-panel). *(<=2h)* (cases/attempts imbriqués rendus dans le panneau détail)
-- [x] **7.3** Gérer l'affichage des erreurs (text prformaté, pas de rendu HTML) et ajouter labels/`aria-label` pour interactions (NFR-7). *(<=2h)* (raw output en `pre` texte brut + aria-labels sur actions)
+- [x] **7.3** Gérer l'affichage des erreurs (text prformaté, pas de rendu HTML) et ajouter labels/`aria-label` pour interactions (NFR-7). *(<=2h)* (`pre` texte brut + labels/aria-label existants conservés)
 
 **Acceptance Criteria**:
 
@@ -422,4 +422,4 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 | Phase 4 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Panneau RUN_CONFIGURATION + édition model_specs + submit POST `/benchmark/runs` avec `ButtonSpinner` implémentés. |
 | Phase 5 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Liste des runs + résultats V1 avec fallback `/runs/{id}` + coloration seuils via `benchmarkScores.ts`. |
 | Phase 6 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Vue comparaison multi-modèles (`ComparisonTable`) avec meilleur score mis en évidence et retour. |
-| Phase 7 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Détail run (`ExpansionPanel`) avec cases/attempts, scores et raw output texte brut. |
+| Phase 7 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Détail run (`ExpansionPanel`) branché dans la page avec cases/attempts, scores et raw output texte brut. |
