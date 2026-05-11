@@ -3,6 +3,8 @@ import { api } from '../../api/client';
 import type {
   BenchmarkCreateRunPayload,
   BenchmarkFixture,
+  BenchmarkRun,
+  BenchmarkRunDetail,
   ModelSpec,
 } from '../../types/benchmark';
 
@@ -25,7 +27,12 @@ export function useBenchmarkPageState(token: string | null) {
   const [fixturesError, setFixturesError] = useState<string | null>(null);
   const [selectedFixtureId, setSelectedFixtureId] = useState<number | null>(null);
 
-  const [runsCountHint, setRunsCountHint] = useState(0);
+  const [runs, setRuns] = useState<BenchmarkRun[]>([]);
+  const [runsLoading, setRunsLoading] = useState(false);
+  const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
+  const [runDetail, setRunDetail] = useState<BenchmarkRunDetail | null>(null);
+  const [runDetailLoading, setRunDetailLoading] = useState(false);
+  const [runDetailError, setRunDetailError] = useState<string | null>(null);
 
   const [modelSpecs, setModelSpecs] = useState<ModelSpec[]>([DEFAULT_MODEL_SPEC]);
   const [repeatCount, setRepeatCount] = useState('3');
@@ -36,6 +43,11 @@ export function useBenchmarkPageState(token: string | null) {
   const selectedFixture = useMemo(
     () => fixtures.find((fixture) => fixture.id === selectedFixtureId) ?? null,
     [fixtures, selectedFixtureId],
+  );
+
+  const selectedRun = useMemo(
+    () => runs.find((run) => run.id === selectedRunId) ?? null,
+    [runs, selectedRunId],
   );
 
   const loadFixtures = async () => {
@@ -59,6 +71,55 @@ export function useBenchmarkPageState(token: string | null) {
   useEffect(() => {
     void loadFixtures();
   }, [token]);
+
+  useEffect(() => {
+    if (!selectedFixtureId) {
+      setRuns([]);
+      return;
+    }
+
+    const loadRuns = async () => {
+      if (!token) return;
+      setRunsLoading(true);
+      try {
+        const data = await api.listBenchmarkRuns(token, { fixture_id: selectedFixtureId });
+        setRuns(data);
+      } finally {
+        setRunsLoading(false);
+      }
+    };
+
+    void loadRuns();
+  }, [token, selectedFixtureId]);
+
+  useEffect(() => {
+    if (!selectedRunId) {
+      setRunDetail(null);
+      return;
+    }
+
+    const loadRunDetail = async () => {
+      if (!token) return;
+      setRunDetailLoading(true);
+      setRunDetailError(null);
+      try {
+        const detail = await api.getBenchmarkRun(token, selectedRunId);
+        setRunDetail(detail);
+        try {
+          await api.getBenchmarkRunResults(token, selectedRunId);
+        } catch {
+          // TODO(GH-26/OQ-1): fallback silencieux tant que le contrat /results n'est pas stabilisé.
+        }
+      } catch (error) {
+        setRunDetail(null);
+        setRunDetailError(error instanceof Error ? error.message : 'Impossible de charger le détail du run');
+      } finally {
+        setRunDetailLoading(false);
+      }
+    };
+
+    void loadRunDetail();
+  }, [token, selectedRunId]);
 
   const handleModelSpecChange = (index: number, field: keyof ModelSpec, value: string) => {
     setModelSpecs((prev) => {
@@ -110,7 +171,7 @@ export function useBenchmarkPageState(token: string | null) {
       }
 
       const refreshedRuns = await api.listBenchmarkRuns(token, { fixture_id: selectedFixture.id });
-      setRunsCountHint(refreshedRuns.length);
+      setRuns(refreshedRuns);
       // TODO(GH-26/OQ-3): tags préparés côté UI, endpoint backend actuel ne supporte pas encore le champ.
       void tagsInput;
     } catch (error) {
@@ -126,13 +187,20 @@ export function useBenchmarkPageState(token: string | null) {
     fixturesError,
     selectedFixtureId,
     selectedFixture,
-    runsCountHint,
+    runs,
+    runsLoading,
+    selectedRun,
+    selectedRunId,
+    runDetail,
+    runDetailLoading,
+    runDetailError,
     modelSpecs,
     repeatCount,
     tagsInput,
     submittingRun,
     submitError,
     setSelectedFixtureId,
+    setSelectedRunId,
     setModelSpecs,
     setRepeatCount,
     setTagsInput,

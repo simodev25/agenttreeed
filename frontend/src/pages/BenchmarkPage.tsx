@@ -2,6 +2,8 @@ import { FlaskConical } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { FixturesTable } from './benchmark/FixturesTable';
 import { RunConfigurationPanel } from './benchmark/RunConfigurationPanel';
+import { RunsTable } from './benchmark/RunsTable';
+import { ResultsTable } from './benchmark/ResultsTables';
 import { useBenchmarkPageState } from './benchmark/useBenchmarkPageState';
 
 export function BenchmarkPage() {
@@ -60,15 +62,35 @@ export function BenchmarkPage() {
         onSubmit={state.handleSubmitRun}
       />
 
+      <RunsTable
+        runs={state.runs}
+        loading={state.runsLoading}
+        selectedRunId={state.selectedRunId}
+        comparisonIds={[]}
+        onSelectRun={state.setSelectedRunId}
+        onToggleCompare={() => {
+          // Comparaison activée en phase 6.
+        }}
+        onOpenCompare={() => {
+          // Comparaison activée en phase 6.
+        }}
+      />
+
+      <ResultsTable
+        selectedRun={state.selectedRun}
+        runDetail={state.runDetail}
+        loading={state.runDetailLoading}
+        error={state.runDetailError}
+      />
+
       <div className="hw-surface p-0 overflow-hidden">
         <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border">
-          <span className="text-[11px] font-bold tracking-[0.12em] text-accent uppercase">RUNS</span>
+          <span className="text-[11px] font-bold tracking-[0.12em] text-accent uppercase">PROCHAINES_SECTIONS</span>
         </div>
         <div className="p-5">
           <p className="text-[11px] text-text-dim">
-            Liste des runs et résultats V1 disponibles dans les prochaines phases.
+            Comparaison multi-modèles et détail run seront finalisés aux phases suivantes.
           </p>
-          <p className="text-[10px] text-text mt-2">Runs refreshés après lancement: {state.runsCountHint}</p>
         </div>
       </div>
     </div>

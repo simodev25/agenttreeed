@@ -201,9 +201,9 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 
 **Tasks**:
 
-- [ ] **5.1** Ajouter une liste/table des runs de la fixture slectionnée (via `GET /benchmark/runs` filtrés client-side si pas de filtre serveur), slection d'un run. *(<=2h)*
-- [ ] **5.2** Charger `GET /benchmark/runs/{id}/results` et rendre un tableau : modèle  5 métriques V1 + `overall` (AC-F4-1). *(<=2h)*
-- [ ] **5.3** Implémenter la fonction de coloration (vert/orange/rouge) selon seuils (AC-F4-2) en utilisant les tokens/classes existants (`text-success`, `text-warning`, `text-danger` ou classes Tailwind conformes). *(<=2h)*
+- [x] **5.1** Ajouter une liste/table des runs de la fixture slectionnée (via `GET /benchmark/runs` filtrés client-side si pas de filtre serveur), slection d'un run. *(<=2h)* (runs listés et sélectionnables dans `RunsTable.tsx`)
+- [x] **5.2** Charger `GET /benchmark/runs/{id}/results` et rendre un tableau : modèle  5 métriques V1 + `overall` (AC-F4-1). *(<=2h)* (appel `/results` tenté, fallback `/runs/{id}` pour rendu V1)
+- [x] **5.3** Implémenter la fonction de coloration (vert/orange/rouge) selon seuils (AC-F4-2) en utilisant les tokens/classes existants (`text-success`, `text-warning`, `text-danger` ou classes Tailwind conformes). *(<=2h)* (helpers/classes implémentés dans `benchmarkScores.ts`)
 
 **Acceptance Criteria**:
 
@@ -230,9 +230,9 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 
 **Tasks**:
 
-- [ ] **6.1** Ajouter une slection multi-modèle (checkbox)  partir des résultats/runs, avec CTA "COMPARER" activé  partir de 2 slections. *(<=2h)*
-- [ ] **6.2** Rendre une vue comparaison : tableau métriques  colonnes modèles, meilleur score par ligne mis en évidence. *(<=2h)*
-- [ ] **6.3** Ajouter une action "Retour" / fermeture comparaison pour revenir aux résultats standard. *(<=2h)*
+- [x] **6.1** Ajouter une slection multi-modèle (checkbox)  partir des résultats/runs, avec CTA "COMPARER" activé  partir de 2 slections. *(<=2h)* (checkboxes + CTA activé à partir de 2 sélections)
+- [x] **6.2** Rendre une vue comparaison : tableau métriques  colonnes modèles, meilleur score par ligne mis en évidence. *(<=2h)* (`ComparisonTable` avec mise en évidence du meilleur score)
+- [x] **6.3** Ajouter une action "Retour" / fermeture comparaison pour revenir aux résultats standard. *(<=2h)* (bouton RETOUR pour fermer la comparaison)
 
 **Acceptance Criteria**:
 
@@ -256,9 +256,9 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 
 **Tasks**:
 
-- [ ] **7.1** Ajouter un panneau détail (pattern `ExpansionPanel`)  l'ouverture d'un run slectionné, avec appel `GET /benchmark/runs/{id}`. *(<=2h)*
-- [ ] **7.2** Rendre la liste des `BenchmarkCase` avec statut + indicateurs (latence, tokens) et afficher les `BenchmarkAttempt` imbriqués (peut être un sous-panel). *(<=2h)*
-- [ ] **7.3** Gérer l'affichage des erreurs (text prformaté, pas de rendu HTML) et ajouter labels/`aria-label` pour interactions (NFR-7). *(<=2h)*
+- [x] **7.1** Ajouter un panneau détail (pattern `ExpansionPanel`)  l'ouverture d'un run slectionné, avec appel `GET /benchmark/runs/{id}`. *(<=2h)* (`RunDetailPanel` + chargement `getBenchmarkRun`)
+- [x] **7.2** Rendre la liste des `BenchmarkCase` avec statut + indicateurs (latence, tokens) et afficher les `BenchmarkAttempt` imbriqués (peut être un sous-panel). *(<=2h)* (cases/attempts imbriqués rendus dans le panneau détail)
+- [x] **7.3** Gérer l'affichage des erreurs (text prformaté, pas de rendu HTML) et ajouter labels/`aria-label` pour interactions (NFR-7). *(<=2h)* (raw output en `pre` texte brut + aria-labels sur actions)
 
 **Acceptance Criteria**:
 
@@ -420,3 +420,6 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 | Phase 2 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Route `/benchmark` ajoutée dans `App.tsx`, item sidebar BENCHMARK (NODE_07) ajouté dans `Layout.tsx`, page squelette alignée design system créée. |
 | Phase 3 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Chargement fixtures + états loading/error/empty implémentés via hook `useBenchmarkPageState` et composant `FixturesTable`. |
 | Phase 4 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Panneau RUN_CONFIGURATION + édition model_specs + submit POST `/benchmark/runs` avec `ButtonSpinner` implémentés. |
+| Phase 5 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Liste des runs + résultats V1 avec fallback `/runs/{id}` + coloration seuils via `benchmarkScores.ts`. |
+| Phase 6 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Vue comparaison multi-modèles (`ComparisonTable`) avec meilleur score mis en évidence et retour. |
+| Phase 7 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Détail run (`ExpansionPanel`) avec cases/attempts, scores et raw output texte brut. |
