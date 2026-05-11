@@ -54,6 +54,7 @@ services:
       - ./backend/debug-strategy:/app/debug-strategy
     command: >
       sh -c "mkdir -p /tmp/prometheus-backend && rm -rf /tmp/prometheus-backend/* &&
+      python scripts/run_migrations_safely.py &&
       uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - '8000:8000'
