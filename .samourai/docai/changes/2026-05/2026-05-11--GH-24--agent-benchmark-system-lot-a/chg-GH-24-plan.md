@@ -1,0 +1,371 @@
+---
+id: chg-GH-24-agent-benchmark-system-lot-a
+status: Proposed
+created: 2026-05-11T13:16:30Z
+last_updated: 2026-05-11T13:16:30Z
+owners: [engineering]
+service: benchmark
+labels: [type:feature, priority:high, change]
+links:
+  change_spec: ./chg-GH-24-spec.md
+summary: >
+  Kairos Mesh ne dispose d'aucun mécanisme objectif pour évaluer et comparer les performances des modèles LLM par agent de trading. Ce changement (Lot A) introduit un sous-système de benchmarking dédié composé de : fixtures versionnées gelant les entrées et configurations, un moteur d'exécution réutilisant le cœur partagé du pipeline (`ALL_AGENT_FACTORIES`, `build_toolkit()`, `build_model()`, `build_formatter()`), un moteur de scoring V1 purement objectif (validité de schéma, complétude, conformité aux politiques d'outils, cohérence des références, stabilité), et une API REST complète. Le Lot A couvre uniquement le backend ; le dashboard frontend (Lot B) et le scoring LLM-juge (Lot C) sont explicitement hors périmètre.
+version_impact: minor
+---
+
+# IMPLEMENTATION PLAN — GH-24: Système de benchmarking des modèles LLM par agent de trading (Lot A)
+
+## Context and Goals
+
+Ce plan implémente le **Lot A backend** du sous-système de benchmarking décrit dans la spec (voir `links.change_spec`).
+
+Objectifs principaux (spec §4) :
+- Reproductibilité via **fixtures versionnées + hash** (F-1, NFR-6).
+- Exécution benchmark **sans dérive** en réutilisant strictement le cœur partagé `backend/app/services/agentscope/` (F-3, AC-F4-2, RSK-1).
+- Support des 3 scénarios (F-4) + règle **SKIPPED_DEBATE** (AC-F4-4).
+- Scoring V1 **objectif et déterministe** (F-5, AC-F5-1..4, NFR-2).
+- API REST sous `/api/v1/benchmark/` avec RBAC et pagination (F-6).
+- Exécution asynchrone via Celery (F-7, AC-F2-1) + annulation (AC-F2-3).
+- Traçabilité vers `llm_call_log` via `analysis_run_id` (F-8, NFR-5).
+
+**Classification (project profile)** : Feature (Build, haute complexité technique) → tâches petites (≤2h), livraison incrémentale, tests unitaires obligatoires.
+
+### Questions ouvertes (à résoudre avant delivery)
+
+- **OQ-1** : File Celery benchmark isolée ou non (risque de contention, RSK-5).
+- **OQ-2** : Poids des métriques (agrégation) configurables **par run uniquement** ou aussi **par fixture**.
+- **OQ-3** : Scénario `full-pipeline` : inclure `execution-manager` (simulation) ou s'arrêter au `risk-manager` (décision attendue ; si ambigu → Decision needed: consulter `@architect`).
+
+## Scope
+
+### In Scope
+
+- **F-1** : CRUD fixtures versionnées (immutables, activation/désactivation, soft delete).
+- **F-2** : Lancement de runs avec `BenchmarkModelSpec` explicite + vérification `fixture_hash`.
+- **F-3** : Moteur d'exécution réutilisant `ALL_AGENT_FACTORIES`, `build_toolkit()`, `build_model()`, `build_formatter()`.
+- **F-4** : Scénarios `single-agent`, `debate-bundle`, `full-pipeline` (avec règle SKIPPED_DEBATE).
+- **F-5** : Scoring V1 (schema validity, completeness, tool policy compliance, reference consistency, stability) + agrégation pondérable (par défaut poids égaux).
+- **F-6** : API REST `/api/v1/benchmark/` (fixtures + runs + consultation/filtrage/pagination).
+- **F-7** : Exécution async via Celery + suivi statuts.
+- **F-8** : Corrélation coûts via `llm_call_log` (lecture seule) + `llm_calls_count`.
+- **DM-1..DM-4** : Alembic + modèles SQLAlchemy des 4 tables.
+- **Tests unitaires** : fixture, exécution agent unique, scoring, CRUD API (spec §7.1).
+
+### Out of Scope
+
+- Lot B : dashboard frontend.
+- Lot C/V2 : scoring subjectif (LLM juge) + statistiques avancées.
+- CI/CD automatisée d'exécution des benchmarks.
+- Modifications du pipeline de trading en production.
+
+### Constraints
+
+- Migration **additive uniquement** (spec §8.5, §19).
+- Réutilisation du cœur `agentscope` **en lecture seule** (AC-F4-2) ; éviter tout fork.
+- Endpoints conformes aux patterns existants (ex: `backtests.py`) : JWT + RBAC + pagination.
+- Tâches **≤ 2h** ; commits petits (profil « haute complexité technique »).
+- Zone critique : **ne pas modifier** `backend/app/risk/`.
+
+### Risks
+
+- **RSK-1 (dérive)** : mitigé par l’appel strict des factories partagées + tests de cohérence (AC-F4-2).
+- **RSK-2 (coût LLM)** : `max_llm_calls` + `llm_calls_count` + logs (F-2, F-8, NFR-5).
+- **RSK-4 (débat)** : règle SKIPPED_DEBATE explicitement testée (AC-F4-4).
+- **RSK-5 (broker Celery)** : décision OQ-1 + option queue dédiée (F-7).
+- **RSK-6 (intégrité fixtures)** : vérif server-side du hash + HTTP 409 (AC-F2-2, NFR-6).
+
+### Success Metrics
+
+- Reproductibilité du scoring : 100% (NFR-2).
+- Migration Alembic : 4 tables créées sans erreur (KPIs, DM-1..DM-4).
+- Couverture des métriques V1 : 5 métriques opérationnelles (F-5).
+- Non-régression : tests existants OK (AC-NFR-1).
+
+## Phases
+
+### Phase 1: Scaffolding backend + modèle de données (Alembic + ORM)
+
+**Goal**: Poser la base DB/ORM pour DM-1..DM-4 (tables + enums + index) sans toucher aux tables existantes.
+
+**Tasks**:
+
+- [ ] **1.1** Définir les enums et statuts run (`PENDING`, `RUNNING`, `COMPLETED`, `FAILED`, `SKIPPED_DEBATE`, `CANCELLED`) et les valeurs `scenario_type` (F-2, F-4 ; AC-F2-1, AC-F4-4).
+- [ ] **1.2** Créer la migration Alembic additive pour **DM-1..DM-4** (4 tables + index + FKs lecture seule vers `analysis_run` si applicable) (F-1, F-2, F-8 ; KPIs).
+- [ ] **1.3** Implémenter les modèles SQLAlchemy pour : `benchmark_fixture`, `benchmark_run`, `benchmark_case`, `benchmark_attempt` (DM-1..DM-4) (F-1..F-8).
+- [ ] **1.4** Ajouter le wiring ORM minimal (imports/registry) pour rendre les modèles utilisables par l’API et les services (F-6).
+
+**Acceptance Criteria**:
+
+- Must: Migration Alembic crée les 4 tables avec index/FKs (DM-1..DM-4).
+- Must: Aucune modification des tables existantes (spec §8.5).
+
+**Files and modules**:
+
+- `backend/app/db/models/benchmark_fixture.py` (new)
+- `backend/app/db/models/benchmark_run.py` (new)
+- `backend/app/db/models/benchmark_case.py` (new)
+- `backend/app/db/models/benchmark_attempt.py` (new)
+- `backend/app/db/models/__init__.py` (updated)
+- `backend/alembic/versions/<rev>_gh24_benchmark_tables.py` (new) *(chemin exact à confirmer selon structure Alembic du repo)*
+
+**Tests**:
+
+- `pytest -q` : test(s) de smoke migration (création des tables dans DB de test) (AC-NFR-1).
+
+**Completion signal**: `feat(GH-24): add benchmark tables migration and ORM models`
+
+---
+
+### Phase 2: Schémas Pydantic + contrats API (fixtures & runs)
+
+**Goal**: Définir les schémas d’entrée/sortie et les validations nécessaires (immutabilité, hash, répétitions ≥ 2).
+
+**Tasks**:
+
+- [ ] **2.1** Définir `BenchmarkModelSpec` (provider, model_name, parameters) + validation de provider (`ollama|openai|mistral`) (F-2).
+- [ ] **2.2** Définir les schémas Pydantic fixtures : create, out, list item, patch activation, et règles d’immutabilité (F-1 ; AC-F1-1, AC-F1-2, AC-F1-3).
+- [ ] **2.3** Définir les schémas Pydantic runs : create request, run out, run detail (cases/attempts/scores) conformes au contrat spec §8.1 (F-2, F-6 ; AC-F2-1, AC-F6-2).
+- [ ] **2.4** Ajouter la validation `repetitions >= 2` + normalisation valeurs par défaut (`repetitions=3`) (F-5 ; AC-F5-4).
+
+**Acceptance Criteria**:
+
+- Must: Les payloads respectent le contrat spec et rejettent les modifications interdites (AC-F1-2).
+- Must: `repetitions` ne peut pas être < 2 (AC-F5-4).
+
+**Files and modules**:
+
+- `backend/app/schemas/benchmark.py` (new)
+
+**Tests**:
+
+- Tests unitaires de validation Pydantic (fixtures/run create) (AC-F1-1, AC-F1-2, AC-F2-1).
+
+**Completion signal**: `feat(GH-24): add benchmark Pydantic schemas and validations`
+
+---
+
+### Phase 3: Moteur de scoring V1 (objectif, déterministe)
+
+**Goal**: Implémenter le scoring V1 (5 métriques) + agrégation pondérable, sans dépendance à un LLM.
+
+**Tasks**:
+
+- [ ] **3.1** Implémenter la métrique **validité de schéma** (1.0/0.0 via validation Pydantic par agent) (F-5 ; AC-F5-1, AC-F5-2).
+- [ ] **3.2** Implémenter la métrique **complétude** (ratio champs requis non nuls) (F-5).
+- [ ] **3.3** Implémenter la métrique **cohérence des références** (symbol/timeframe et autres identifiants attendus vs inputs fixture) (F-5).
+- [ ] **3.4** Implémenter la métrique **conformité politiques d’outils** : discovery de la source de vérité (tool call logs existants) + calcul ratio conforme à `preset_kwargs`/`force_kwargs` (F-5).
+- [ ] **3.5** Implémenter **stabilité** : `1 - CV(aggregate_scores)` sur N répétitions, et stratégie de persistance (ex: appliquer une même `stability_score` aux tentatives d’un case une fois N connu) (F-5 ; AC-F5-4).
+- [ ] **3.6** Implémenter l’agrégation pondérable (poids par défaut égaux ; prise en compte décision OQ-2) (F-5).
+
+**Acceptance Criteria**:
+
+- Must: `schema_validity_score` vaut exactement 1.0/0.0 selon validation (AC-F5-1, AC-F5-2).
+- Must: Scores déterministes sur inputs identiques (AC-F5-3, NFR-2).
+- Must: `stability_score` calculé pour `repetitions >= 2` (AC-F5-4).
+
+**Files and modules**:
+
+- `backend/app/services/benchmark/scoring_v1.py` (new)
+- `backend/app/services/benchmark/agent_output_registry.py` (new) *(mapping agent_name → schéma Pydantic attendu)*
+
+**Tests**:
+
+- Unit tests scoring (cas valide/invalide schema, complétude, références, stabilité) (AC-F5-1..4).
+
+**Completion signal**: `feat(GH-24): add deterministic scoring engine v1`
+
+---
+
+### Phase 4: Moteur d’exécution benchmark (réutilisation du cœur agentscope) + scénarios
+
+**Goal**: Exécuter les scénarios en réutilisant les factories partagées, capturer `raw_output`, et produire des tentatives scorées.
+
+**Tasks**:
+
+- [ ] **4.1** Implémenter la construction d’un agent benchmarké via `ALL_AGENT_FACTORIES` + `build_toolkit()` + `build_model()` + `build_formatter()` en injectant config fixture + `BenchmarkModelSpec` (F-3 ; AC-F4-2).
+- [ ] **4.2** Implémenter le scénario `single-agent` : exécuter N répétitions, persister 1 case + N attempts + statut COMPLETED (F-4 ; AC-F4-1).
+- [ ] **4.3** Implémenter le scénario `debate-bundle` : exécuter bullish → bearish → trader avec passage de contexte ; persister 3 cases + tentatives (F-4 ; AC-F4-3).
+- [ ] **4.4** Implémenter la règle SKIPPED_DEBATE si `llm_enabled=false` pour l’un des 3 agents (pas de tentatives, statut + log WARN) (F-4 ; AC-F4-4).
+- [ ] **4.5** Implémenter le scénario `full-pipeline` (8 agents, 4 phases) en respectant la décision OQ-3 ; documenter le comportement effectif dans le code (F-4).
+- [ ] **4.6** Implémenter la traçabilité `llm_call_log` : capture/propagation de `analysis_run_id` (si créé par le pipeline), calcul `llm_calls_count` et persistance sur attempt (F-8 ; NFR-5).
+
+**Acceptance Criteria**:
+
+- Must: Appels stricts au cœur partagé (AC-F4-2).
+- Must: `single-agent` crée exactement N tentatives (AC-F4-1).
+- Must: `debate-bundle` crée 3 cases avec passage de contexte (AC-F4-3) OU SKIPPED_DEBATE (AC-F4-4).
+
+**Files and modules**:
+
+- `backend/app/services/benchmark/engine.py` (new)
+- `backend/app/services/benchmark/scenarios.py` (new)
+
+**Tests**:
+
+- Unit test exécution `single-agent` en mode déterministe (`llm_enabled=false` si applicable) (AC-F4-1).
+- Unit test SKIPPED_DEBATE (AC-F4-4).
+
+**Completion signal**: `feat(GH-24): add benchmark execution engine and scenarios`
+
+---
+
+### Phase 5: Services applicatifs + API REST `/api/v1/benchmark/` (fixtures & runs)
+
+**Goal**: Exposer la gestion fixtures et runs via FastAPI selon patterns existants (RBAC + pagination + erreurs HTTP).
+
+**Tasks**:
+
+- [ ] **5.1** Implémenter les services CRUD fixtures : create (hash server-side), list filtres, get, patch activation, soft delete (F-1 ; AC-F1-1, AC-F1-3).
+- [ ] **5.2** Empêcher toute modification de `inputs`/`config` sur une fixture existante (réponse 422) (F-1 ; AC-F1-2).
+- [ ] **5.3** Implémenter POST `/runs` : vérif `fixture_hash` (409 si mismatch), create run PENDING, enqueue Celery (F-2, F-7 ; AC-F2-1, AC-F2-2).
+- [ ] **5.4** Implémenter GET `/runs` : filtres (agent, modèle, fixture, statut, date) + pagination + scores agrégés (F-6 ; AC-F6-1).
+- [ ] **5.5** Implémenter GET `/runs/{id}` : run detail (cases + tentatives + 5 scores + agrégats) (F-6 ; AC-F6-2).
+- [ ] **5.6** Implémenter DELETE `/runs/{id}` : annulation d’un run PENDING (statut CANCELLED) + révocation tâche Celery (F-2 ; AC-F2-3).
+- [ ] **5.7** Appliquer RBAC : ADMIN pour write, ANALYST pour read, aligné aux patterns (spec §8.1) (F-6).
+
+**Acceptance Criteria**:
+
+- Must: Création fixture retourne 201 avec `fixture_id`, `hash`, `version=1`, `is_active=true` (AC-F1-1).
+- Must: POST run crée PENDING + enqueue (AC-F2-1) et hash mismatch → 409 (AC-F2-2).
+- Must: GET runs filtré + pagination (AC-F6-1) et GET run detail conforme (AC-F6-2).
+
+**Files and modules**:
+
+- `backend/app/api/routes/benchmark.py` (new)
+- `backend/app/services/benchmark/fixtures_service.py` (new)
+- `backend/app/services/benchmark/runs_service.py` (new)
+- `backend/app/api/<api_v1_router_registration>.py` (updated) *(enregistrer le router — emplacement exact à confirmer)*
+
+**Tests**:
+
+- Tests API fixtures CRUD + RBAC (AC-F1-1..3).
+- Tests API runs (create/hash mismatch/list/detail/cancel) (AC-F2-1..3, AC-F6-1..2).
+
+**Completion signal**: `feat(GH-24): add benchmark REST API routes and services`
+
+---
+
+### Phase 6: Tâche Celery benchmark (orchestration DB + engine + scoring)
+
+**Goal**: Exécuter un run en background et gérer les transitions de statut de manière atomique.
+
+**Tasks**:
+
+- [ ] **6.1** Créer la tâche Celery `execute_benchmark_run(run_id)` : transitions `PENDING→RUNNING→COMPLETED/FAILED/SKIPPED_DEBATE` + `started_at/completed_at/error` (F-7 ; AC-F2-1).
+- [ ] **6.2** Implémenter la gestion d’annulation (révocation) : si CANCELLED → ne pas persister de tentatives ; cohérence avec DELETE `/runs/{id}` (F-2 ; AC-F2-3).
+- [ ] **6.3** Intégrer `max_llm_calls` (limite de coût) : arrêt contrôlé + statut FAILED (ou autre statut si décidé) avec message explicite (F-2 ; RSK-2).
+- [ ] **6.4** Décision OQ-1 : configurer la queue utilisée (réutilisation queue existante vs queue dédiée benchmark) et documenter le choix (F-7 ; RSK-5).
+
+**Acceptance Criteria**:
+
+- Must: POST `/runs` enqueue et la tâche met à jour le statut jusqu’à COMPLETED/FAILED/SKIPPED_DEBATE (AC-F2-1, AC-F4-4).
+
+**Files and modules**:
+
+- `backend/app/tasks/benchmark_task.py` (new)
+- `backend/app/tasks/celery_app.py` (updated) *(enregistrer la tâche si nécessaire)*
+
+**Tests**:
+
+- Unit test task : transitions statut + persistance attempts (AC-F4-1).
+- Unit test cancel : run PENDING annulé → tâche ne crée rien (AC-F2-3).
+
+**Completion signal**: `feat(GH-24): add celery benchmark execution task`
+
+---
+
+### Phase 7: Tests unitaires ciblés + non-régression
+
+**Goal**: Couvrir F-1..F-8 et les AC critiques, et garantir zéro régression.
+
+**Tasks**:
+
+- [ ] **7.1** Tests DB/ORM : création fixture, version/hash, soft delete, relations run→case→attempt (F-1, DM-1..DM-4).
+- [ ] **7.2** Tests scoring : déterminisme, stabilité, validité schéma, complétude, références (F-5 ; AC-F5-1..4).
+- [ ] **7.3** Tests API fixtures : POST 201, immutabilité 422, filtres/pagination (F-1 ; AC-F1-1..3).
+- [ ] **7.4** Tests API runs : POST 201 + enqueue (mock), 409 hash mismatch, DELETE cancel, GET list filtres, GET detail (F-2, F-6, F-7 ; AC-F2-1..3, AC-F6-1..2).
+- [ ] **7.5** Test scénario debate-bundle : cas normal + SKIPPED_DEBATE (F-4 ; AC-F4-3, AC-F4-4).
+- [ ] **7.6** Exécuter la suite existante (backend) et vérifier zéro régression (AC-NFR-1).
+
+**Acceptance Criteria**:
+
+- Must: Tous les AC pertinents ci-dessus couverts par tests unitaires.
+- Must: Zéro régression sur tests existants (AC-NFR-1).
+
+**Files and modules**:
+
+- `backend/tests/test_benchmark_*.py` (new)
+
+**Tests**:
+
+- `cd backend && pytest -q` (AC-NFR-1).
+
+**Completion signal**: `test(GH-24): add benchmark unit tests and regression coverage`
+
+---
+
+### Phase 8: Synchronisation spec ↔ impl, revue, et release
+
+**Goal**: Clôturer le lot A proprement : cohérence spec/impl, version bump, readiness pour PR.
+
+**Tasks**:
+
+- [ ] **8.1** Reconciliation spec : vérifier que l’impl respecte F-1..F-8 et AC-F* ; documenter toute divergence (F-1..F-8 ; AC-NFR-1).
+- [ ] **8.2** Ajouter/ajuster la doc interne liée (ex: limites, guide dev, endpoints) si nécessaire (aligné spec §22.impact ops ; sans dépasser le périmètre Lot A).
+- [ ] **8.3** Version bump : appliquer l’impact **minor** selon conventions du repo (emplacement à confirmer) (version_impact: minor).
+- [ ] **8.4** Phase review (analyse) : auto-audit rapide (sécurité RBAC, déterminisme scoring, migration rollback) ; si besoin, créer une phase de fixes post-review (profil Build).
+
+**Acceptance Criteria**:
+
+- Must: Spec et impl alignées ; écarts résolus ou tracés.
+- Must: Version bump appliqué selon conventions.
+
+**Files and modules**:
+
+- `./chg-GH-24-spec.md` (reference)
+- (éventuels docs) `docs/*` (updated) *(si requis par impl — à confirmer pendant delivery)*
+
+**Tests**:
+
+- Re-run `cd backend && pytest -q`.
+
+**Completion signal**: `chore(GH-24): reconcile spec, bump version, and prepare release`
+
+## Test Scenarios
+
+| ID | Scénario | Phases | AC |
+|----|----------|--------|----|
+| TS-1 | Créer une fixture valide → hash calculé server-side, version=1 | 5, 7 | AC-F1-1 |
+| TS-2 | Rejeter modification `inputs/config` d’une fixture | 5, 7 | AC-F1-2 |
+| TS-3 | Lister fixtures filtrées par agent + pagination | 5, 7 | AC-F1-3 |
+| TS-4 | Créer un run valide → statut PENDING + Celery enqueued | 5, 6, 7 | AC-F2-1 |
+| TS-5 | Créer un run avec `fixture_hash` incorrect → 409 | 5, 7 | AC-F2-2 |
+| TS-6 | Annuler un run PENDING → CANCELLED + tâche révoquée | 5, 6, 7 | AC-F2-3 |
+| TS-7 | Exécution `single-agent` avec repetitions=3 → 3 attempts + COMPLETED | 4, 6, 7 | AC-F4-1 |
+| TS-8 | Vérifier réutilisation du cœur partagé (factories appelées) | 4, 7 | AC-F4-2 |
+| TS-9 | Exécution `debate-bundle` : 3 cases + passage de contexte | 4, 6, 7 | AC-F4-3 |
+| TS-10 | `debate-bundle` avec llm_enabled=false → SKIPPED_DEBATE, aucune tentative | 4, 6, 7 | AC-F4-4 |
+| TS-11 | Scoring : validité schéma 1.0 / 0.0 | 3, 7 | AC-F5-1, AC-F5-2 |
+| TS-12 | Scoring déterministe sur inputs identiques (hors stabilité) | 3, 7 | AC-F5-3 |
+| TS-13 | Stabilité calculée pour repetitions>=2 | 3, 7 | AC-F5-4 |
+| TS-14 | GET `/runs` filtré par fixture+agent + pagination | 5, 7 | AC-F6-1 |
+| TS-15 | GET `/runs/{id}` détail complet + p95 cible (profilage léger) | 5, 7 | AC-F6-2 |
+| TS-16 | Non-régression suite backend | 7 | AC-NFR-1 |
+
+## Artifacts and Links
+
+| Artifact | Location | Type |
+|----------|----------|------|
+| Change specification | `./chg-GH-24-spec.md` | Spec |
+| Implementation plan | `./chg-GH-24-plan.md` | Plan |
+
+## Plan Revision Log
+
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | 2026-05-11 | plan-writer | Plan initial (phases DB → scoring → engine → API → Celery → tests → release) |
+
+## Execution Log
+
+| Phase | Status | Started | Completed | Commit | Notes |
+|-------|--------|---------|-----------|--------|-------|
