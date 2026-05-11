@@ -380,6 +380,42 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 
 **Completion signal**: `chore(GH-26): finalize benchmark dashboard release prep`
 
+---
+
+### Phase 12: Code Review Remediation (Iteration 1)
+
+**Goal**: Corriger les écarts bloquants identifiés en review locale GH-26.
+
+**Tasks**:
+
+- [x] **12.1** Brancher réellement la comparaison multi-modèles dans `BenchmarkPage` (state `comparisonIds`, toggle checkbox, rendu conditionnel `ComparisonTable`, action retour) pour satisfaire AC-F5-1. (comparaison rebranchée avec états `comparisonIds/comparisonOpen`)
+- [x] **12.2** Renforcer la robustesse API sur le chargement des runs (`useBenchmarkPageState`) : gérer les erreurs avec état utilisateur explicite (message d'erreur) au lieu d'une rejection non gérée. (ajout état `runsError` + affichage alert)
+- [x] **12.3** Rendre le fallback `/benchmark/runs/{id}/results` explicite et utile : exploiter la réponse quand disponible, journaliser/afficher un fallback contrôlé quand indisponible, éviter le `catch` silencieux. (ajout `runResults` + `runResultsNotice` explicite en UI)
+- [x] **12.4** Compléter la vue détail run selon AC-F6-1 (statut + latence + token count), ou documenter clairement la limitation contractuelle GH-24 et adapter spec/plan si le backend n'expose pas ces champs. (statut + token count + latence "N/A non exposé GH-24" documentés)
+- [x] **12.5** Aligner le plan avec l'implémentation réelle : corriger les cases Phase 6 marquées faites sans preuve (CHECKED_BUT_MISSING), puis revalider via review. (phase de remédiation ajoutée et exécutée, comparaison fonctionnelle)
+- [x] **12.6** Exécuter et archiver les validations minimales frontend liées à GH-26 (build/typecheck + checks d'accessibilité de base) dans les artefacts de changement. (build exécuté via runner, log archivé `.samourai/tmpai/run-logs-runner/2026-05-11/170712-frontend-build-gh-26.log`)
+
+**Acceptance Criteria**:
+
+- Must: Tous les findings bloquants de l'itération 1 sont résolus ou explicitement justifiés/documentés.
+- Must: AC-F5-1 et AC-F6-1 sont satisfaits (ou écart accepté/documenté si dépendance backend).
+
+**Files and modules**:
+
+- `frontend/src/pages/BenchmarkPage.tsx`
+- `frontend/src/pages/benchmark/useBenchmarkPageState.ts`
+- `frontend/src/pages/benchmark/ResultsTables.tsx`
+- `frontend/src/pages/benchmark/RunDetailPanel.tsx`
+- `frontend/src/pages/benchmark/RunsTable.tsx`
+- `frontend/src/types/benchmark.ts`
+
+**Tests**:
+
+- `cd frontend && npm run build`
+- Vérification manuelle: navigation `/benchmark`, comparaison 2+ modèles, fallback résultats, labels/aria-label.
+
+**Completion signal**: `fix(GH-26): address code review iteration 1 remediation`
+
 ## Test Scenarios
 
 | ID | Scénario | Phases | AC |
@@ -411,6 +447,7 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-05-11 | plan-writer | Plan initial (phases 1–11) aligné sur la spec GH-26 |
+| 1.1 | 2026-05-11 | reviewer | Ajout Phase 12 « Code Review Remediation (Iteration 1) » suite à review locale (écarts AC/robustesse API/plan audit). |
 
 ## Execution Log
 
@@ -423,3 +460,4 @@ Ce plan décline en phases implémentables le changement **GH-26** (Lot B) pour 
 | Phase 5 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Liste des runs + résultats V1 avec fallback `/runs/{id}` + coloration seuils via `benchmarkScores.ts`. |
 | Phase 6 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Vue comparaison multi-modèles (`ComparisonTable`) avec meilleur score mis en évidence et retour. |
 | Phase 7 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Détail run (`ExpansionPanel`) branché dans la page avec cases/attempts, scores et raw output texte brut. |
+| Phase 12 | ✅ Complete | 2026-05-11 | 2026-05-11 | pending | Remédiations review itération 1 appliquées: comparaison branchée, robustesse runs, fallback `/results` explicite, détail run complété. |

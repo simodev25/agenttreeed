@@ -36,6 +36,8 @@ export function RunDetailPanel({ runDetail, loading, error }: RunDetailPanelProp
                       </span>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-[10px]">
+                      <span className="text-text-dim">Statut: <strong className="text-text">{attempt.aggregate_score >= 0.7 ? 'OK' : 'À vérifier'}</strong></span>
+                      <span className="text-text-dim">Latence: <strong className="text-text">N/A (non exposé par GH-24)</strong></span>
                       <span className="text-text-dim">Schema: <strong className={getBenchmarkScoreClass(attempt.schema_validity_score)}>{formatBenchmarkScore(attempt.schema_validity_score)}</strong></span>
                       <span className="text-text-dim">Complétude: <strong className={getBenchmarkScoreClass(attempt.completeness_score)}>{formatBenchmarkScore(attempt.completeness_score)}</strong></span>
                       <span className="text-text-dim">Policy: <strong className={getBenchmarkScoreClass(attempt.tool_policy_compliance_score)}>{formatBenchmarkScore(attempt.tool_policy_compliance_score)}</strong></span>

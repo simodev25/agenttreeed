@@ -1,4 +1,4 @@
-import type { BenchmarkRun, BenchmarkRunDetail } from '../../types/benchmark';
+import type { BenchmarkRun, BenchmarkRunDetail, BenchmarkRunResults } from '../../types/benchmark';
 import {
   BENCHMARK_METRIC_KEYS,
   BENCHMARK_METRIC_LABELS,
@@ -12,6 +12,8 @@ interface ResultsTableProps {
   runDetail: BenchmarkRunDetail | null;
   loading: boolean;
   error: string | null;
+  runResults: BenchmarkRunResults | null;
+  runResultsNotice: string | null;
 }
 
 interface ComparisonTableProps {
@@ -27,7 +29,7 @@ function modelLabel(run: BenchmarkRun): string {
   return `${provider}/${modelName}`;
 }
 
-export function ResultsTable({ selectedRun, runDetail, loading, error }: ResultsTableProps) {
+export function ResultsTable({ selectedRun, runDetail, loading, error, runResults, runResultsNotice }: ResultsTableProps) {
   if (!selectedRun) {
     return <p className="text-[11px] text-text-dim">Sélectionnez un run pour afficher les résultats.</p>;
   }
@@ -42,6 +44,9 @@ export function ResultsTable({ selectedRun, runDetail, loading, error }: Results
   }
 
   const scores = computeBenchmarkRunScores(runDetail);
+  const endpointRow = runResults?.rows[0];
+  const endpointScores = endpointRow?.scores ?? null;
+  const effectiveScores = endpointScores ?? scores;
 
   return (
     <div className="hw-surface p-0 overflow-hidden">
@@ -49,6 +54,11 @@ export function ResultsTable({ selectedRun, runDetail, loading, error }: Results
         <span className="text-[11px] font-bold tracking-[0.12em] text-accent uppercase">RÉSULTATS_V1</span>
         <span className="text-[10px] text-text-dim">Run #{selectedRun.id} — {modelLabel(selectedRun)}</span>
       </div>
+      {runResultsNotice && (
+        <div className="px-5 pt-3">
+          <p className="text-[10px] text-text-dim">{runResultsNotice}</p>
+        </div>
+      )}
       <div className="p-5 overflow-x-auto">
         <table className="w-full">
           <thead>
@@ -63,7 +73,7 @@ export function ResultsTable({ selectedRun, runDetail, loading, error }: Results
           <tbody>
             <tr className="border-b border-border/30">
               {BENCHMARK_METRIC_KEYS.map((metricKey) => {
-                const value = scores[metricKey];
+                const value = effectiveScores[metricKey];
                 return (
                   <td key={metricKey} className={`px-3 py-2 text-[11px] font-semibold ${getBenchmarkScoreClass(value)}`}>
                     {formatBenchmarkScore(value)}

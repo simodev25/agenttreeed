@@ -5,6 +5,7 @@ import type {
   BenchmarkFixture,
   BenchmarkRun,
   BenchmarkRunDetail,
+  BenchmarkRunResults,
   ModelSpec,
 } from '../../types/benchmark';
 
@@ -29,16 +30,23 @@ export function useBenchmarkPageState(token: string | null) {
 
   const [runs, setRuns] = useState<BenchmarkRun[]>([]);
   const [runsLoading, setRunsLoading] = useState(false);
+  const [runsError, setRunsError] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<number | null>(null);
   const [runDetail, setRunDetail] = useState<BenchmarkRunDetail | null>(null);
   const [runDetailLoading, setRunDetailLoading] = useState(false);
   const [runDetailError, setRunDetailError] = useState<string | null>(null);
+  const [runResults, setRunResults] = useState<BenchmarkRunResults | null>(null);
+  const [runResultsNotice, setRunResultsNotice] = useState<string | null>(null);
 
   const [modelSpecs, setModelSpecs] = useState<ModelSpec[]>([DEFAULT_MODEL_SPEC]);
   const [repeatCount, setRepeatCount] = useState('3');
   const [tagsInput, setTagsInput] = useState('');
   const [submittingRun, setSubmittingRun] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const [comparisonIds, setComparisonIds] = useState<number[]>([]);
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+  const [comparisonDetailsById, setComparisonDetailsById] = useState<Record<number, BenchmarkRunDetail>>({});
 
   const selectedFixture = useMemo(
     () => fixtures.find((fixture) => fixture.id === selectedFixtureId) ?? null,
@@ -75,15 +83,20 @@ export function useBenchmarkPageState(token: string | null) {
   useEffect(() => {
     if (!selectedFixtureId) {
       setRuns([]);
+      setRunsError(null);
       return;
     }
 
     const loadRuns = async () => {
       if (!token) return;
       setRunsLoading(true);
+      setRunsError(null);
       try {
         const data = await api.listBenchmarkRuns(token, { fixture_id: selectedFixtureId });
         setRuns(data);
+      } catch (error) {
+        setRuns([]);
+        setRunsError(error instanceof Error ? error.message : 'Impossible de charger les runs');
       } finally {
         setRunsLoading(false);
       }
@@ -95,6 +108,8 @@ export function useBenchmarkPageState(token: string | null) {
   useEffect(() => {
     if (!selectedRunId) {
       setRunDetail(null);
+      setRunResults(null);
+      setRunResultsNotice(null);
       return;
     }
 
@@ -102,16 +117,27 @@ export function useBenchmarkPageState(token: string | null) {
       if (!token) return;
       setRunDetailLoading(true);
       setRunDetailError(null);
+      setRunResults(null);
+      setRunResultsNotice(null);
       try {
         const detail = await api.getBenchmarkRun(token, selectedRunId);
         setRunDetail(detail);
         try {
-          await api.getBenchmarkRunResults(token, selectedRunId);
-        } catch {
-          // TODO(GH-26/OQ-1): fallback silencieux tant que le contrat /results n'est pas stabilisé.
+          const results = await api.getBenchmarkRunResults(token, selectedRunId);
+          if (Array.isArray(results.rows) && results.rows.length > 0) {
+            setRunResults(results);
+            setRunResultsNotice('Résultats issus de /benchmark/runs/{id}/results.');
+          } else {
+            setRunResultsNotice('Fallback: résultat agrégé reconstruit depuis /benchmark/runs/{id}.');
+          }
+        } catch (resultsError) {
+          const reason = resultsError instanceof Error ? resultsError.message : 'indisponible';
+          setRunResultsNotice(`Fallback actif: /benchmark/runs/{id}/results indisponible (${reason}).`);
         }
       } catch (error) {
         setRunDetail(null);
+        setRunResults(null);
+        setRunResultsNotice(null);
         setRunDetailError(error instanceof Error ? error.message : 'Impossible de charger le détail du run');
       } finally {
         setRunDetailLoading(false);
@@ -181,6 +207,29 @@ export function useBenchmarkPageState(token: string | null) {
     }
   };
 
+  const handleSelectFixture = (fixtureId: number) => {
+    setSelectedFixtureId(fixtureId);
+    setSelectedRunId(null);
+    setComparisonIds([]);
+    setComparisonOpen(false);
+    setComparisonDetailsById({});
+  };
+
+  const toggleCompare = async (runId: number) => {
+    setComparisonIds((prev) => {
+      if (prev.includes(runId)) return prev.filter((id) => id !== runId);
+      return [...prev, runId];
+    });
+
+    if (!token || comparisonDetailsById[runId] != null) return;
+    try {
+      const detail = await api.getBenchmarkRun(token, runId);
+      setComparisonDetailsById((prev) => ({ ...prev, [runId]: detail }));
+    } catch {
+      // Le détail peut être indisponible, on laisse la comparaison partielle.
+    }
+  };
+
   return {
     fixtures,
     fixturesLoading,
@@ -189,22 +238,32 @@ export function useBenchmarkPageState(token: string | null) {
     selectedFixture,
     runs,
     runsLoading,
+    runsError,
     selectedRun,
     selectedRunId,
     runDetail,
     runDetailLoading,
     runDetailError,
+    runResults,
+    runResultsNotice,
     modelSpecs,
     repeatCount,
     tagsInput,
     submittingRun,
     submitError,
+    comparisonIds,
+    comparisonOpen,
+    comparisonDetailsById,
     setSelectedFixtureId,
     setSelectedRunId,
+    setComparisonIds,
+    setComparisonOpen,
     setModelSpecs,
     setRepeatCount,
     setTagsInput,
     handleModelSpecChange,
     handleSubmitRun,
+    handleSelectFixture,
+    toggleCompare,
   };
 }

@@ -3,7 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 import { FixturesTable } from './benchmark/FixturesTable';
 import { RunConfigurationPanel } from './benchmark/RunConfigurationPanel';
 import { RunsTable } from './benchmark/RunsTable';
-import { ResultsTable } from './benchmark/ResultsTables';
+import { ComparisonTable, ResultsTable } from './benchmark/ResultsTables';
 import { RunDetailPanel } from './benchmark/RunDetailPanel';
 import { useBenchmarkPageState } from './benchmark/useBenchmarkPageState';
 
@@ -31,9 +31,7 @@ export function BenchmarkPage() {
             selectedFixtureId={state.selectedFixtureId}
             loading={state.fixturesLoading}
             error={state.fixturesError}
-            onSelectFixture={(fixtureId) => {
-              state.setSelectedFixtureId(fixtureId);
-            }}
+            onSelectFixture={state.handleSelectFixture}
           />
         </div>
       </div>
@@ -67,22 +65,33 @@ export function BenchmarkPage() {
         runs={state.runs}
         loading={state.runsLoading}
         selectedRunId={state.selectedRunId}
-        comparisonIds={[]}
+        comparisonIds={state.comparisonIds}
         onSelectRun={state.setSelectedRunId}
-        onToggleCompare={() => {
-          // Comparaison activée en phase 6.
+        onToggleCompare={(runId) => {
+          void state.toggleCompare(runId);
         }}
-        onOpenCompare={() => {
-          // Comparaison activée en phase 6.
-        }}
+        onOpenCompare={() => state.setComparisonOpen(true)}
       />
 
-      <ResultsTable
-        selectedRun={state.selectedRun}
-        runDetail={state.runDetail}
-        loading={state.runDetailLoading}
-        error={state.runDetailError}
-      />
+      {state.runsError && <p className="alert">{state.runsError}</p>}
+
+      {state.comparisonOpen ? (
+        <ComparisonTable
+          runs={state.runs}
+          runDetailsById={state.comparisonDetailsById}
+          comparisonIds={state.comparisonIds}
+          onClose={() => state.setComparisonOpen(false)}
+        />
+      ) : (
+        <ResultsTable
+          selectedRun={state.selectedRun}
+          runDetail={state.runDetail}
+          loading={state.runDetailLoading}
+          error={state.runDetailError}
+          runResults={state.runResults}
+          runResultsNotice={state.runResultsNotice}
+        />
+      )}
 
       <RunDetailPanel
         runDetail={state.runDetail}
@@ -96,7 +105,7 @@ export function BenchmarkPage() {
         </div>
         <div className="p-5">
           <p className="text-[11px] text-text-dim">
-            Comparaison multi-modèles et détail run seront finalisés aux phases suivantes.
+            Vérifier version bump/changelog et alignement final AC/NFR avant création de PR.
           </p>
         </div>
       </div>
