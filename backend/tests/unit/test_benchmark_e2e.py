@@ -107,7 +107,8 @@ class _FakeMsg:
     def __init__(self, *, metadata=None, text: str = '', content=None) -> None:
         self.metadata = metadata
         self._text = text
-        self.content = content
+        # If content not explicitly set, use text as content (simulates Msg with string content)
+        self.content = content if content is not None else text
 
     def get_text_content(self) -> str:
         return self._text
@@ -137,6 +138,39 @@ def test_extract_output_payload_falls_back_to_text_for_non_json() -> None:
     extracted = _extract_output_payload(msg)
 
     assert extracted == {'text': 'plain response without json'}
+
+
+def test_extract_output_payload_extracts_json_from_thinking_blocks() -> None:
+    """DeepSeek models put structured output in ThinkingBlocks, not TextBlocks.
+    The extractor must parse JSON from thinking block content."""
+    json_payload = {'structural_bias': 'bullish', 'signal': 'neutral', 'score': 0.8}
+    # Simulate Msg with only thinking blocks (content is a list of block dicts)
+    msg = _FakeMsg(
+        metadata={},
+        text='',
+        content=[{'type': 'thinking', 'thinking': json.dumps(json_payload)}],
+    )
+
+    extracted = _extract_output_payload(msg)
+
+    assert extracted == json_payload
+
+
+def test_extract_output_payload_extracts_from_mixed_blocks() -> None:
+    """When both thinking and text blocks exist, extract from all."""
+    json_payload = {'signal': 'bullish', 'confidence': 0.9}
+    msg = _FakeMsg(
+        metadata={},
+        text='',
+        content=[
+            {'type': 'thinking', 'thinking': 'Let me analyze...'},
+            {'type': 'text', 'text': json.dumps(json_payload)},
+        ],
+    )
+
+    extracted = _extract_output_payload(msg)
+
+    assert extracted == json_payload
 
 
 def test_score_attempt_technical_analyst_valid_output_reference_matches_fixture() -> None:

@@ -52,6 +52,36 @@ def _try_extract_json(text: str) -> dict[str, Any]:
     return {}
 
 
+def _extract_all_text_from_msg(msg: Any) -> str:
+    """Extract text from ALL content blocks (text + thinking).
+
+    AgentScope's get_text_content() only returns TextBlock content.
+    Models like DeepSeek use ThinkingBlocks which contain the actual
+    structured output. This function captures everything.
+    """
+    content = getattr(msg, 'content', None)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict):
+                # TextBlock: {'type': 'text', 'text': '...'}
+                if block.get('type') == 'text' and block.get('text'):
+                    parts.append(block['text'])
+                # ThinkingBlock: {'type': 'thinking', 'thinking': '...'}
+                elif block.get('type') == 'thinking' and block.get('thinking'):
+                    parts.append(block['thinking'])
+            elif hasattr(block, 'text'):
+                parts.append(str(block.text))
+            elif hasattr(block, 'thinking'):
+                parts.append(str(block.thinking))
+        return '\n'.join(parts)
+    if content is not None:
+        return str(content)
+    return ''
+
+
 def _extract_output_payload(
     msg: Any,
     *,
@@ -93,19 +123,23 @@ def _extract_output_payload(
             agent_name,
             attempt_number,
         )
-    # 2. Try to get text content and parse JSON from it
+    # 2. Try to get text content from ALL blocks (text + thinking)
     text = ''
     try:
-        text = msg.get_text_content() or ''
+        text = _extract_all_text_from_msg(msg)
     except Exception as exc:
         logger.warning(
-            'benchmark run_id=%s extraction get_text_content failed agent_name=%s attempt_number=%s error=%s',
+            'benchmark run_id=%s extraction _extract_all_text failed agent_name=%s attempt_number=%s error=%s',
             run_id,
             agent_name,
             attempt_number,
             exc,
         )
-        text = str(getattr(msg, 'content', ''))
+        # Fallback to get_text_content
+        try:
+            text = msg.get_text_content() or ''
+        except Exception:
+            text = str(getattr(msg, 'content', ''))
     if text:
         try:
             parsed = _try_extract_json(text)
