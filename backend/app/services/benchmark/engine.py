@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections import defaultdict
 from typing import Any
 
@@ -28,6 +29,9 @@ from app.services.benchmark.scenarios import (
 from app.services.benchmark.scoring_v1 import compute_stability_score, score_attempt
 
 
+logger = logging.getLogger(__name__)
+
+
 class BenchmarkEngine:
     def __init__(self) -> None:
         self.settings = get_settings()
@@ -49,12 +53,20 @@ class BenchmarkEngine:
     async def _build_agent(
         self,
         *,
+        run_id: int,
         db: Session,
         agent_name: str,
         fixture: BenchmarkFixture,
         model_spec: dict[str, Any],
     ):
         provider, model_name, base_url, api_key = self._resolve_provider_config(model_spec)
+        logger.info(
+            'benchmark run_id=%s building agent agent_name=%s provider=%s model_name=%s',
+            run_id,
+            agent_name,
+            provider,
+            model_name,
+        )
         model = build_model(provider, model_name, base_url, api_key, temperature=float(model_spec.get('parameters', {}).get('temperature', 0.0)))
         formatter = build_formatter(provider, multi_agent=False, base_url=base_url)
         toolkit = await build_toolkit(
@@ -80,10 +92,25 @@ class BenchmarkEngine:
         scenario_type = benchmark_run.scenario_type
         repetitions = int(benchmark_run.repetitions)
         model_spec = benchmark_run.model_spec or {}
+        model_provider = str(model_spec.get('provider') or 'ollama').strip().lower()
+        model_name = str(model_spec.get('model_name') or '').strip()
+        model_parameter_keys = sorted(list((model_spec.get('parameters') or {}).keys())) if isinstance(model_spec.get('parameters'), dict) else []
+
+        logger.info(
+            'benchmark run_id=%s start execution fixture_id=%s scenario_type=%s model_provider=%s model_name=%s model_parameter_keys=%s repetitions=%s',
+            benchmark_run.id,
+            benchmark_run.fixture_id,
+            scenario_type,
+            model_provider,
+            model_name,
+            model_parameter_keys,
+            repetitions,
+        )
 
         # Build an AgentScope Msg from fixture inputs — agents expect Msg, not str
         raw_inputs = fixture.inputs or {}
         context_text = str(raw_inputs.get('context') or '')
+        input_keys = sorted(list(raw_inputs.keys())) if isinstance(raw_inputs, dict) else []
         # Enrich with structured fixture inputs if available
         extra_parts: list[str] = []
         for key in ('news_context', 'portfolio_state', 'execution_context',
@@ -96,6 +123,12 @@ class BenchmarkEngine:
         if not context_text:
             context_text = f"Benchmark analysis for {fixture.agent_name}"
         context_msg = Msg("user", context_text, "user")
+        logger.debug(
+            'benchmark run_id=%s built context_msg length=%s input_keys=%s',
+            benchmark_run.id,
+            len(context_text),
+            input_keys,
+        )
 
         def _create_analysis_run_record(agent_name: str) -> int:
             pair = str((fixture.inputs or {}).get('symbol') or (fixture.inputs or {}).get('pair') or 'BENCH')
@@ -127,26 +160,48 @@ class BenchmarkEngine:
         if scenario_type == BenchmarkScenarioType.SINGLE_AGENT:
             analysis_run_id_single = _create_analysis_run_record(fixture.agent_name)
             created_analysis_run_ids.add(analysis_run_id_single)
-            agent = await self._build_agent(db=db, agent_name=fixture.agent_name, fixture=fixture, model_spec=model_spec)
+            agent = await self._build_agent(run_id=int(benchmark_run.id), db=db, agent_name=fixture.agent_name, fixture=fixture, model_spec=model_spec)
+            logger.info(
+                'benchmark run_id=%s calling scenario=%s analysis_run_id=%s',
+                benchmark_run.id,
+                BenchmarkScenarioType.SINGLE_AGENT,
+                analysis_run_id_single,
+            )
             execution = await run_single_agent_scenario(
+                run_id=int(benchmark_run.id),
                 analysis_run_id=analysis_run_id_single,
                 agent_name=fixture.agent_name,
                 agent=agent,
                 context_msg=context_msg,
                 repetitions=repetitions,
             )
+            logger.info(
+                'benchmark run_id=%s scenario=%s completed status=%s attempts=%s',
+                benchmark_run.id,
+                BenchmarkScenarioType.SINGLE_AGENT,
+                execution.status,
+                len(execution.attempts),
+            )
         elif scenario_type == BenchmarkScenarioType.DEBATE_BUNDLE:
             analysis_run_id_debate = _create_analysis_run_record('debate-bundle')
             created_analysis_run_ids.add(analysis_run_id_debate)
-            bullish = await self._build_agent(db=db, agent_name='bullish-researcher', fixture=fixture, model_spec=model_spec)
-            bearish = await self._build_agent(db=db, agent_name='bearish-researcher', fixture=fixture, model_spec=model_spec)
-            trader = await self._build_agent(db=db, agent_name='trader-agent', fixture=fixture, model_spec=model_spec)
+            bullish = await self._build_agent(run_id=int(benchmark_run.id), db=db, agent_name='bullish-researcher', fixture=fixture, model_spec=model_spec)
+            bearish = await self._build_agent(run_id=int(benchmark_run.id), db=db, agent_name='bearish-researcher', fixture=fixture, model_spec=model_spec)
+            trader = await self._build_agent(run_id=int(benchmark_run.id), db=db, agent_name='trader-agent', fixture=fixture, model_spec=model_spec)
             llm_enabled_flags = {
                 'bullish-researcher': bool((fixture.config or {}).get('llm_enabled', True)),
                 'bearish-researcher': bool((fixture.config or {}).get('llm_enabled', True)),
                 'trader-agent': bool((fixture.config or {}).get('llm_enabled', True)),
             }
+            logger.info(
+                'benchmark run_id=%s calling scenario=%s analysis_run_id=%s llm_enabled_flags=%s',
+                benchmark_run.id,
+                BenchmarkScenarioType.DEBATE_BUNDLE,
+                analysis_run_id_debate,
+                llm_enabled_flags,
+            )
             execution = await run_debate_bundle_scenario(
+                run_id=int(benchmark_run.id),
                 analysis_run_id=analysis_run_id_debate,
                 llm_enabled_flags=llm_enabled_flags,
                 bullish_agent=bullish,
@@ -154,6 +209,13 @@ class BenchmarkEngine:
                 trader_agent=trader,
                 context_msg=context_msg,
                 repetitions=repetitions,
+            )
+            logger.info(
+                'benchmark run_id=%s scenario=%s completed status=%s attempts=%s',
+                benchmark_run.id,
+                BenchmarkScenarioType.DEBATE_BUNDLE,
+                execution.status,
+                len(execution.attempts),
             )
         elif scenario_type == BenchmarkScenarioType.FULL_PIPELINE:
             analysis_run_id_pipeline = _create_analysis_run_record('full-pipeline')
@@ -170,20 +232,36 @@ class BenchmarkEngine:
             ordered_agents = [
                 (
                     agent_name,
-                    await self._build_agent(db=db, agent_name=agent_name, fixture=fixture, model_spec=model_spec),
+                    await self._build_agent(run_id=int(benchmark_run.id), db=db, agent_name=agent_name, fixture=fixture, model_spec=model_spec),
                 )
                 for agent_name in ordered_agent_names
             ]
+            logger.info(
+                'benchmark run_id=%s calling scenario=%s analysis_run_id=%s agents=%s',
+                benchmark_run.id,
+                BenchmarkScenarioType.FULL_PIPELINE,
+                analysis_run_id_pipeline,
+                ordered_agent_names,
+            )
             execution = await run_full_pipeline_scenario(
+                run_id=int(benchmark_run.id),
                 analysis_run_id=analysis_run_id_pipeline,
                 ordered_agents=ordered_agents,
                 context_msg=context_msg,
                 repetitions=repetitions,
             )
+            logger.info(
+                'benchmark run_id=%s scenario=%s completed status=%s attempts=%s',
+                benchmark_run.id,
+                BenchmarkScenarioType.FULL_PIPELINE,
+                execution.status,
+                len(execution.attempts),
+            )
         else:
             raise HTTPException(status_code=422, detail=f'Unsupported scenario_type {scenario_type}')
 
         if execution.status == BenchmarkRunStatus.SKIPPED_DEBATE:
+            logger.info('benchmark run_id=%s scenario skipped status=%s', benchmark_run.id, execution.status)
             analysis_run = db.get(AnalysisRun, analysis_run_id_debate) if analysis_run_id_debate is not None else None
             if analysis_run is not None:
                 analysis_run.status = 'completed'
@@ -204,6 +282,16 @@ class BenchmarkEngine:
         scoring_weights = benchmark_run.effective_scoring_weights or fixture.default_scoring_weights
 
         for scenario_attempt in execution.attempts:
+            raw_output_preview = json.dumps(scenario_attempt.raw_output, default=str)[:500]
+            raw_output_keys = sorted(list(scenario_attempt.raw_output.keys())) if isinstance(scenario_attempt.raw_output, dict) else []
+            logger.debug(
+                'benchmark run_id=%s extracted raw_output agent_name=%s attempt_number=%s raw_output_keys=%s raw_output_preview=%s',
+                benchmark_run.id,
+                scenario_attempt.agent_name,
+                scenario_attempt.attempt_number,
+                raw_output_keys,
+                raw_output_preview,
+            )
             case = case_by_agent.get(scenario_attempt.agent_name)
             if case is None:
                 case = BenchmarkCase(
@@ -224,6 +312,17 @@ class BenchmarkEngine:
                 fixture_config=fixture.config or {},
                 tool_calls=[],
                 scoring_weights=scoring_weights,
+            )
+            logger.info(
+                'benchmark run_id=%s scored attempt agent_name=%s attempt_number=%s schema_validity=%.4f completeness=%.4f tool_policy=%.4f reference_consistency=%.4f aggregate=%.4f',
+                benchmark_run.id,
+                scenario_attempt.agent_name,
+                scenario_attempt.attempt_number,
+                score['schema_validity_score'],
+                score['completeness_score'],
+                score['tool_policy_compliance_score'],
+                score['reference_consistency_score'],
+                score['aggregate_score'],
             )
 
             attempt = BenchmarkAttempt(
@@ -273,6 +372,15 @@ class BenchmarkEngine:
                 analysis_run.trace = {**(analysis_run.trace or {}), 'benchmark_status': benchmark_run.status}
             db.commit()
             db.refresh(benchmark_run)
+            logger.error(
+                'benchmark run_id=%s final status=%s attempts=%s cases=%s reason=max_llm_calls_exceeded total_llm_calls=%s limit=%s',
+                benchmark_run.id,
+                benchmark_run.status,
+                len(execution.attempts),
+                len(case_by_agent),
+                total_llm_calls,
+                benchmark_run.max_llm_calls,
+            )
             return benchmark_run
 
         for agent_name, scores in aggregate_scores_by_agent.items():
@@ -295,4 +403,11 @@ class BenchmarkEngine:
 
         db.commit()
         db.refresh(benchmark_run)
+        logger.info(
+            'benchmark run_id=%s final status=%s attempts=%s cases=%s',
+            benchmark_run.id,
+            benchmark_run.status,
+            len(execution.attempts),
+            len(case_by_agent),
+        )
         return benchmark_run

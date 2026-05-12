@@ -359,6 +359,39 @@ Criterion: version bump minor appliqué — PASSED (`0.2.0`).
 
 ## Test Scenarios
 
+### Phase 9: Observabilité benchmark — logs d’exécution détaillés
+
+**Goal**: Améliorer le diagnostic production des runs benchmark sans modifier la logique métier.
+
+**Tasks**:
+
+- [x] **9.1** Ajouter des logs structurés dans `engine.py` (début/fin de run, construction context, construction agents, appels scénarios, extraction raw_output, scoring par attempt, résultat final). (logs ajoutés avec préfixe `benchmark run_id=%s`)
+- [x] **9.2** Ajouter des logs structurés dans `scenarios.py` avant/après chaque appel agent, extraction payload et fallbacks d’extraction. (logs info/debug/warning/error ajoutés, sans changement fonctionnel)
+- [x] **9.3** Renforcer `benchmark_task.py` pour tracer le traceback complet en échec + statut final du run. (`logger.error(..., exc_info=True)` + logs statut final)
+- [x] **9.4** Valider avec la suite ciblée benchmark E2E. (`cd backend && python3 -m pytest tests/unit/test_benchmark_e2e.py -v` PASS)
+
+**Acceptance Criteria**:
+
+- Must: Tous les logs ajoutés respectent le préfixe `benchmark run_id=...`.
+- Must: Aucune modification de logique métier benchmark.
+- Must: Tests ciblés benchmark E2E passent.
+
+Criterion: préfixe de logs `benchmark run_id=...` appliqué sur les points clés demandés — PASSED (engine/scenarios/task mis à jour).
+Criterion: logique métier inchangée (ajouts de logging uniquement) — PASSED.
+Criterion: tests benchmark E2E PASS — PASSED (`5 passed in 1.00s`).
+
+**Files and modules**:
+
+- `backend/app/services/benchmark/engine.py` (updated)
+- `backend/app/services/benchmark/scenarios.py` (updated)
+- `backend/app/tasks/benchmark_task.py` (updated)
+
+**Tests**:
+
+- `cd backend && python3 -m pytest tests/unit/test_benchmark_e2e.py -v`
+
+**Completion signal**: `chore(GH-24): add detailed benchmark execution logging`
+
 | ID | Scénario | Phases | AC |
 |----|----------|--------|----|
 | TS-1 | Créer une fixture valide → hash calculé server-side, version=1 | 5, 7 | AC-F1-1 |
@@ -391,6 +424,7 @@ Criterion: version bump minor appliqué — PASSED (`0.2.0`).
 |---------|------|--------|---------|
 | 1.0 | 2026-05-11 | plan-writer | Plan initial (phases DB → scoring → engine → API → Celery → tests → release) |
 | 1.1 | 2026-05-11 | coder | Exécution phases 1..8 + preuves tests + critères PASSED/PARTIAL + logs d’exécution |
+| 1.2 | 2026-05-12 | coder | Ajout Phase 9 « Observabilité benchmark » (logging détaillé engine/scenarios/task) + validation tests E2E benchmark. |
 
 ## Execution Log
 
@@ -404,3 +438,4 @@ Criterion: version bump minor appliqué — PASSED (`0.2.0`).
 | Phase 6 | DONE | 2026-05-11T16:05:00Z | 2026-05-11T16:12:00Z | `6b43e5f` | Tâche Celery benchmark + queue dédiée + max_llm_calls |
 | Phase 7 | DONE* | 2026-05-11T16:12:00Z | 2026-05-11T16:25:00Z | `6b43e5f` | 20 tests benchmark PASS; *suite backend complète non lancée (instruction utilisateur) |
 | Phase 8 | DONE | 2026-05-11T16:25:00Z | 2026-05-11T16:35:00Z | `PENDING` | Reconciliation spec/doc + version bump minor |
+| Phase 9 | DONE | 2026-05-12T00:00:00Z | 2026-05-12T00:00:00Z | `PENDING` | Logs détaillés benchmark ajoutés (`engine.py`, `scenarios.py`, `benchmark_task.py`) ; tests ciblés benchmark E2E PASS. |
