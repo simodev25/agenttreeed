@@ -175,14 +175,31 @@ async def run_single_agent_scenario(
         content_length = len(content_value) if isinstance(content_value, str) else len(str(content_value))
         metadata = getattr(result_msg, 'metadata', None)
         has_metadata = isinstance(metadata, dict) and bool(metadata)
+        # Diagnostic: dump Msg structure to understand extraction failures
+        text_content = ''
+        try:
+            text_content = result_msg.get_text_content() or ''
+        except Exception:
+            pass
+        content_type = type(content_value).__name__
+        content_preview = ''
+        if isinstance(content_value, list):
+            block_types = [type(b).__name__ if not isinstance(b, dict) else b.get('type', '?') for b in content_value[:5]]
+            content_preview = f'blocks={block_types}'
+        elif isinstance(content_value, str):
+            content_preview = content_value[:200]
         logger.info(
-            'benchmark run_id=%s after agent call scenario=single-agent agent_name=%s attempt_number=%s msg_type=%s has_metadata=%s content_length=%s',
+            'benchmark run_id=%s after agent call scenario=single-agent agent_name=%s attempt_number=%s '
+            'msg_type=%s has_metadata=%s content_type=%s content_length=%s text_content_length=%s content_preview=%s',
             run_id,
             agent_name,
             attempt_number,
             type(result_msg).__name__,
             has_metadata,
+            content_type,
             content_length,
+            len(text_content),
+            content_preview,
         )
 
         payload = _extract_output_payload(result_msg, run_id=run_id, agent_name=agent_name, attempt_number=attempt_number)
