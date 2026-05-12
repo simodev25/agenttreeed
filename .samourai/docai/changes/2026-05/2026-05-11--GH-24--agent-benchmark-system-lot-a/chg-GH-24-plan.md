@@ -392,6 +392,39 @@ Criterion: tests benchmark E2E PASS — PASSED (`5 passed in 1.00s`).
 
 **Completion signal**: `chore(GH-24): add detailed benchmark execution logging`
 
+---
+
+### Phase 10: Alignement prompts benchmark avec prompts DB agentscope
+
+**Goal**: Utiliser le vrai system prompt (DB + fallback registry) dans `BenchmarkEngine._build_agent` avec priorité override fixture.
+
+**Tasks**:
+
+- [x] **10.1** Ajouter une couverture de test ciblée pour vérifier que `_build_agent` utilise `PromptTemplateService.render(...)` (fallback `DEFAULT_PROMPTS`) et transmet les variables `pair/timeframe` issues de `fixture.inputs`. (`backend/tests/unit/test_benchmark_engine_prompt_resolution.py` ajouté ; tests RED→GREEN validant DB+fallback et override)
+- [x] **10.2** Modifier `backend/app/services/benchmark/engine.py` : priorité `fixture.config.system_prompt` non vide, sinon résolution DB via `PromptTemplateService`, avec fallback robuste identique au pattern registry. (`engine.py` mis à jour: override fixture > PromptTemplateService.render > fallback `DEFAULT_PROMPTS` + warning en cas d’échec render)
+- [x] **10.3** Exécuter la validation ciblée demandée : `cd backend && python3 -m pytest tests/unit/test_benchmark_e2e.py -v`. (PASS: `5 passed in 0.75s`; log runner `./.samourai/tmpai/run-logs-runner/2026-05-12/143132-pytest-benchmark-e2e.log`)
+
+**Acceptance Criteria**:
+
+- Must: Sans override fixture, le benchmark charge le system prompt via DB (PromptTemplateService) avec fallback `DEFAULT_PROMPTS`.
+- Must: Avec override `fixture.config.system_prompt` non vide, cette valeur prime sur la DB.
+- Must: Tests ciblés benchmark E2E passent après changement.
+
+Criterion: chargement prompt DB/fallback et priorité override fixture — PASSED (`tests/unit/test_benchmark_engine_prompt_resolution.py`: `2 passed in 1.01s`, log `./.samourai/tmpai/run-logs-runner/2026-05-12/143123-pytest-benchmark-engine-prompt-resolution.log`).
+Criterion: tests benchmark E2E PASS — PASSED (`tests/unit/test_benchmark_e2e.py`: `5 passed in 0.75s`, log `./.samourai/tmpai/run-logs-runner/2026-05-12/143132-pytest-benchmark-e2e.log`).
+
+**Files and modules**:
+
+- `backend/app/services/benchmark/engine.py` (updated)
+- `backend/tests/unit/test_benchmark_engine_prompt_resolution.py` (new)
+
+**Tests**:
+
+- `cd backend && python3 -m pytest tests/unit/test_benchmark_engine_prompt_resolution.py -v`
+- `cd backend && python3 -m pytest tests/unit/test_benchmark_e2e.py -v`
+
+**Completion signal**: `fix(GH-24): load benchmark system prompts from DB with fixture override priority`
+
 | ID | Scénario | Phases | AC |
 |----|----------|--------|----|
 | TS-1 | Créer une fixture valide → hash calculé server-side, version=1 | 5, 7 | AC-F1-1 |
@@ -425,6 +458,7 @@ Criterion: tests benchmark E2E PASS — PASSED (`5 passed in 1.00s`).
 | 1.0 | 2026-05-11 | plan-writer | Plan initial (phases DB → scoring → engine → API → Celery → tests → release) |
 | 1.1 | 2026-05-11 | coder | Exécution phases 1..8 + preuves tests + critères PASSED/PARTIAL + logs d’exécution |
 | 1.2 | 2026-05-12 | coder | Ajout Phase 9 « Observabilité benchmark » (logging détaillé engine/scenarios/task) + validation tests E2E benchmark. |
+| 1.3 | 2026-05-12 | coder | Ajout Phase 10 « Alignement prompts benchmark avec prompts DB agentscope » (tests + implémentation + validation E2E ciblée). |
 
 ## Execution Log
 
@@ -439,3 +473,4 @@ Criterion: tests benchmark E2E PASS — PASSED (`5 passed in 1.00s`).
 | Phase 7 | DONE* | 2026-05-11T16:12:00Z | 2026-05-11T16:25:00Z | `6b43e5f` | 20 tests benchmark PASS; *suite backend complète non lancée (instruction utilisateur) |
 | Phase 8 | DONE | 2026-05-11T16:25:00Z | 2026-05-11T16:35:00Z | `PENDING` | Reconciliation spec/doc + version bump minor |
 | Phase 9 | DONE | 2026-05-12T00:00:00Z | 2026-05-12T00:00:00Z | `PENDING` | Logs détaillés benchmark ajoutés (`engine.py`, `scenarios.py`, `benchmark_task.py`) ; tests ciblés benchmark E2E PASS. |
+| Phase 10 | DONE | 2026-05-12T00:00:00Z | 2026-05-12T00:00:00Z | `PENDING` | Alignement `BenchmarkEngine` sur prompts DB (`PromptTemplateService`) avec priorité override fixture ; tests prompts + E2E benchmark PASS. |

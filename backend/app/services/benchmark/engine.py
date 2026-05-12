@@ -27,6 +27,7 @@ from app.services.benchmark.scenarios import (
     run_single_agent_scenario,
 )
 from app.services.benchmark.scoring_v1 import compute_stability_score, score_attempt
+from app.services.prompts.registry import DEFAULT_PROMPTS, PromptTemplateService
 
 
 logger = logging.getLogger(__name__)
@@ -77,7 +78,37 @@ class BenchmarkEngine:
         factory = ALL_AGENT_FACTORIES.get(agent_name)
         if not factory:
             raise HTTPException(status_code=422, detail=f'Unsupported agent_name {agent_name}')
-        sys_prompt = str((fixture.config or {}).get('system_prompt') or f'Benchmark mode for {agent_name}')
+        fixture_inputs = fixture.inputs if isinstance(fixture.inputs, dict) else {}
+        fixture_config = fixture.config if isinstance(fixture.config, dict) else {}
+
+        override_system_prompt = str(fixture_config.get('system_prompt') or '').strip()
+        if override_system_prompt:
+            sys_prompt = override_system_prompt
+        else:
+            fallback = DEFAULT_PROMPTS.get(agent_name, {})
+            fallback_system = fallback.get('system', f'You are the {agent_name} agent.')
+            fallback_user = fallback.get('user', '')
+            variables = {
+                'pair': fixture_inputs.get('symbol') or fixture_inputs.get('pair') or 'BENCH',
+                'timeframe': fixture_inputs.get('timeframe') or 'H1',
+            }
+            try:
+                rendered = PromptTemplateService().render(
+                    db,
+                    agent_name,
+                    fallback_system,
+                    fallback_user,
+                    variables,
+                )
+                sys_prompt = str(rendered.get('system_prompt') or fallback_system)
+            except Exception as exc:
+                logger.warning(
+                    'benchmark run_id=%s prompt render failed for agent_name=%s; using fallback: %s',
+                    run_id,
+                    agent_name,
+                    exc,
+                )
+                sys_prompt = str(fallback_system)
         return factory(model=model, formatter=formatter, toolkit=toolkit, sys_prompt=sys_prompt)
 
     async def execute_run(self, db: Session, benchmark_run: BenchmarkRun) -> BenchmarkRun:
