@@ -51,6 +51,7 @@ services:
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus-backend
     volumes:
       - ./backend/debug-traces:/app/debug-traces
+      - ./backend/debug-benchmark:/app/debug-benchmark
       - ./backend/debug-strategy:/app/debug-strategy
     command: >
       sh -c "mkdir -p /tmp/prometheus-backend && rm -rf /tmp/prometheus-backend/* &&
@@ -81,6 +82,7 @@ services:
       AGENTSCOPE_TRACING_URL: http://tempo:4318/v1/traces
     volumes:
       - ./backend/debug-traces:/app/debug-traces
+      - ./backend/debug-benchmark:/app/debug-benchmark
       - ./backend/debug-governance:/app/debug-governance
       - ./backend/debug-strategy:/app/debug-strategy
     expose:

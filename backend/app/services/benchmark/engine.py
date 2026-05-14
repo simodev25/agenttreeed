@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Any
 
 from agentscope.message import Msg
@@ -31,6 +33,67 @@ from app.services.prompts.registry import DEFAULT_PROMPTS, PromptTemplateService
 
 
 logger = logging.getLogger(__name__)
+MAX_DEBUG_TEXT_LENGTH = 10000
+
+
+def _truncate_text(value: str | None, *, max_length: int = MAX_DEBUG_TEXT_LENGTH) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text[:max_length]
+
+
+def _safe_json_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _safe_json_payload(val) for key, val in value.items()}
+    if isinstance(value, list):
+        return [_safe_json_payload(item) for item in value]
+    if isinstance(value, str):
+        return _truncate_text(value)
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return _truncate_text(str(value))
+
+
+def _dump_benchmark_run_summary(
+    *,
+    run_id: int,
+    fixture_id: int,
+    scenario_type: str,
+    model_spec: dict[str, Any],
+    attempts_summary: list[dict[str, Any]],
+    final_status: str,
+    error: str | None,
+) -> None:
+    settings = get_settings()
+    if not settings.debug_benchmark_enabled:
+        return
+
+    try:
+        trace_dir = settings.debug_benchmark_dir or './debug-benchmark'
+        os.makedirs(trace_dir, exist_ok=True)
+
+        ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+        filename = f'bench-{run_id}-summary-{ts}.json'
+        filepath = os.path.join(trace_dir, filename)
+
+        payload = {
+            'run_id': run_id,
+            'fixture_id': fixture_id,
+            'scenario_type': scenario_type,
+            'model_spec': _safe_json_payload(model_spec),
+            'attempts': _safe_json_payload(attempts_summary),
+            'status': final_status,
+            'error': _truncate_text(error),
+            'timestamp': ts,
+        }
+
+        with open(filepath, 'w', encoding='utf-8') as file_handle:
+            json.dump(payload, file_handle, ensure_ascii=False, indent=2, default=str)
+
+        logger.info('benchmark debug summary written: %s', filepath)
+    except Exception as exc:
+        logger.warning('benchmark run_id=%s failed to write debug summary error=%s', run_id, exc)
 
 
 class BenchmarkEngine:
@@ -311,6 +374,8 @@ class BenchmarkEngine:
         attempts_by_agent: dict[str, list[BenchmarkAttempt]] = defaultdict(list)
 
         scoring_weights = benchmark_run.effective_scoring_weights or fixture.default_scoring_weights
+        attempts_summary: list[dict[str, Any]] = []
+        attempt_to_summary: list[tuple[BenchmarkAttempt, dict[str, Any]]] = []
 
         for scenario_attempt in execution.attempts:
             raw_output_preview = json.dumps(scenario_attempt.raw_output, default=str)[:500]
@@ -370,6 +435,23 @@ class BenchmarkEngine:
                 analysis_run_id=scenario_attempt.analysis_run_id,
             )
             db.add(attempt)
+            summary_row = {
+                'agent_name': scenario_attempt.agent_name,
+                'attempt_number': scenario_attempt.attempt_number,
+                'scores': {
+                    'schema_validity': score['schema_validity_score'],
+                    'completeness': score['completeness_score'],
+                    'tool_policy': score['tool_policy_compliance_score'],
+                    'reference_consistency': score['reference_consistency_score'],
+                    'stability': None,
+                    'overall': score['aggregate_score'],
+                },
+                'raw_output_keys': raw_output_keys,
+                'analysis_run_id': scenario_attempt.analysis_run_id,
+                'llm_calls_count': 0,
+            }
+            attempts_summary.append(summary_row)
+            attempt_to_summary.append((attempt, summary_row))
 
             aggregate_scores_by_agent[scenario_attempt.agent_name].append(score['aggregate_score'])
             attempts_by_agent[scenario_attempt.agent_name].append(attempt)
@@ -389,6 +471,9 @@ class BenchmarkEngine:
                 )
                 attempt.llm_calls_count = llm_calls_count
                 total_llm_calls += llm_calls_count
+
+        for attempt_obj, summary_row in attempt_to_summary:
+            summary_row['llm_calls_count'] = int(attempt_obj.llm_calls_count or 0)
 
         if benchmark_run.max_llm_calls is not None and total_llm_calls > int(benchmark_run.max_llm_calls):
             benchmark_run.status = BenchmarkRunStatus.FAILED
@@ -412,6 +497,15 @@ class BenchmarkEngine:
                 total_llm_calls,
                 benchmark_run.max_llm_calls,
             )
+            _dump_benchmark_run_summary(
+                run_id=int(benchmark_run.id),
+                fixture_id=int(benchmark_run.fixture_id),
+                scenario_type=str(benchmark_run.scenario_type),
+                model_spec=benchmark_run.model_spec or {},
+                attempts_summary=attempts_summary,
+                final_status=str(benchmark_run.status),
+                error=benchmark_run.error,
+            )
             return benchmark_run
 
         for agent_name, scores in aggregate_scores_by_agent.items():
@@ -419,6 +513,10 @@ class BenchmarkEngine:
             attempts = attempts_by_agent[agent_name]
             for attempt in attempts:
                 attempt.stability_score = stability
+                for attempt_obj, summary_row in attempt_to_summary:
+                    if attempt_obj is attempt:
+                        summary_row['scores']['stability'] = stability
+                        break
             case = case_by_agent[agent_name]
             case.aggregate_score = sum(scores) / len(scores) if scores else 0.0
 
@@ -440,5 +538,14 @@ class BenchmarkEngine:
             benchmark_run.status,
             len(execution.attempts),
             len(case_by_agent),
+        )
+        _dump_benchmark_run_summary(
+            run_id=int(benchmark_run.id),
+            fixture_id=int(benchmark_run.fixture_id),
+            scenario_type=str(benchmark_run.scenario_type),
+            model_spec=benchmark_run.model_spec or {},
+            attempts_summary=attempts_summary,
+            final_status=str(benchmark_run.status),
+            error=benchmark_run.error,
         )
         return benchmark_run

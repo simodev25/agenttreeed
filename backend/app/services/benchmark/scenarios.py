@@ -2,14 +2,112 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
+from app.core.config import get_settings
 from app.services.benchmark.constants import BenchmarkRunStatus
 from app.services.llm.call_context import use_analysis_run_id
 
 
 logger = logging.getLogger(__name__)
+MAX_DEBUG_TEXT_LENGTH = 10000
+
+
+def _truncate_text(value: str | None, *, max_length: int = MAX_DEBUG_TEXT_LENGTH) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text[:max_length]
+
+
+def _safe_json_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _safe_json_payload(val) for key, val in value.items()}
+    if isinstance(value, list):
+        return [_safe_json_payload(item) for item in value]
+    if isinstance(value, str):
+        return _truncate_text(value)
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return _truncate_text(str(value))
+
+
+def _dump_benchmark_trace(
+    run_id: int,
+    agent_name: str,
+    attempt_number: int,
+    msg: Any,
+    extracted_payload: dict[str, Any],
+) -> None:
+    settings = get_settings()
+    if not settings.debug_benchmark_enabled:
+        return
+
+    try:
+        trace_dir = settings.debug_benchmark_dir or './debug-benchmark'
+        os.makedirs(trace_dir, exist_ok=True)
+
+        ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+        filename = f'bench-{run_id}-{agent_name}-attempt{attempt_number}-{ts}.json'
+        filepath = os.path.join(trace_dir, filename)
+
+        content = getattr(msg, 'content', None)
+        content_dump: Any = None
+        if isinstance(content, list):
+            content_dump = []
+            for block in content:
+                if isinstance(block, dict):
+                    content_dump.append(_safe_json_payload(block))
+                else:
+                    content_dump.append(
+                        {
+                            'type': type(block).__name__,
+                            'text': _truncate_text(getattr(block, 'text', None)),
+                            'thinking': _truncate_text(getattr(block, 'thinking', None)),
+                            'repr': _truncate_text(str(block), max_length=2000),
+                        }
+                    )
+        elif isinstance(content, str):
+            content_dump = _truncate_text(content)
+        elif content is not None:
+            content_dump = _truncate_text(str(content))
+
+        payload = {
+            'run_id': run_id,
+            'agent_name': agent_name,
+            'attempt_number': attempt_number,
+            'timestamp': ts,
+            'msg_type': type(msg).__name__,
+            'msg_role': getattr(msg, 'role', None),
+            'msg_name': getattr(msg, 'name', None),
+            'metadata': _safe_json_payload(getattr(msg, 'metadata', None)),
+            'content_type': type(content).__name__ if content is not None else None,
+            'content': content_dump,
+            'text_content': None,
+            'extracted_payload': _safe_json_payload(extracted_payload),
+        }
+
+        try:
+            text_content = msg.get_text_content()
+            payload['text_content'] = _truncate_text(text_content) if text_content else None
+        except Exception:
+            payload['text_content'] = None
+
+        with open(filepath, 'w', encoding='utf-8') as file_handle:
+            json.dump(payload, file_handle, ensure_ascii=False, indent=2, default=str)
+
+        logger.info('benchmark debug trace written: %s', filepath)
+    except Exception as exc:
+        logger.warning(
+            'benchmark run_id=%s failed to write debug trace agent_name=%s attempt_number=%s error=%s',
+            run_id,
+            agent_name,
+            attempt_number,
+            exc,
+        )
 
 
 @dataclass
@@ -237,6 +335,7 @@ async def run_single_agent_scenario(
         )
 
         payload = _extract_output_payload(result_msg, run_id=run_id, agent_name=agent_name, attempt_number=attempt_number)
+        _dump_benchmark_trace(run_id, agent_name, attempt_number, result_msg, payload)
         logger.debug(
             'benchmark run_id=%s extracted payload scenario=single-agent agent_name=%s attempt_number=%s payload_keys=%s payload_size=%s',
             run_id,
@@ -338,6 +437,9 @@ async def run_debate_bundle_scenario(
         bullish_payload = _extract_output_payload(bullish_msg, run_id=run_id, agent_name='bullish-researcher', attempt_number=attempt_number)
         bearish_payload = _extract_output_payload(bearish_msg, run_id=run_id, agent_name='bearish-researcher', attempt_number=attempt_number)
         trader_payload = _extract_output_payload(trader_msg, run_id=run_id, agent_name='trader-agent', attempt_number=attempt_number)
+        _dump_benchmark_trace(run_id, 'bullish-researcher', attempt_number, bullish_msg, bullish_payload)
+        _dump_benchmark_trace(run_id, 'bearish-researcher', attempt_number, bearish_msg, bearish_payload)
+        _dump_benchmark_trace(run_id, 'trader-agent', attempt_number, trader_msg, trader_payload)
         logger.debug(
             'benchmark run_id=%s extracted payload scenario=debate-bundle attempt_number=%s bullish_keys=%s bearish_keys=%s trader_keys=%s',
             run_id,
@@ -407,6 +509,7 @@ async def run_full_pipeline_scenario(
                 len(content_value) if isinstance(content_value, str) else len(str(content_value)),
             )
             payload = _extract_output_payload(result_msg, run_id=run_id, agent_name=agent_name, attempt_number=attempt_number)
+            _dump_benchmark_trace(run_id, agent_name, attempt_number, result_msg, payload)
             logger.debug(
                 'benchmark run_id=%s extracted payload scenario=full-pipeline agent_name=%s attempt_number=%s payload_keys=%s payload_size=%s',
                 run_id,
